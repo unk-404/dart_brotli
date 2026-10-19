@@ -1,0 +1,5 @@
+# Agent workspace and local build outputs are not part of the package.
+.agents/
+.dart_tool/
+build/
+tool/oracle_rust/target/

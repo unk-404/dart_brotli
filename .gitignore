@@ -9,3 +9,8 @@ pubspec.lock
 .vscode/
 
 .agents/
+
+/build/
+
+# Rust oracle build output
+tool/oracle_rust/target/

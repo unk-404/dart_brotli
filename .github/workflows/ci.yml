@@ -1,0 +1,164 @@
+name: ci
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # TEST: platform matrix. Oracle-backed tests skip without BROTLI_ORACLE.
+  # ---------------------------------------------------------------------------
+  test:
+    name: test (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dart-lang/setup-dart@v1
+        with:
+          sdk: 3.13.5
+      - run: dart pub get
+      - run: dart analyze
+      - run: dart test
+
+  # TEST: browser + JS/Wasm compile.
+  web:
+    name: test (web)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dart-lang/setup-dart@v1
+        with:
+          sdk: 3.13.5
+      - run: dart pub get
+      - name: Browser tests
+        env:
+          CHROME_EXECUTABLE: /usr/bin/google-chrome
+        run: dart test -p chrome test/web
+      - name: Compile JS and Wasm smoke
+        run: |
+          mkdir -p build
+          dart compile js benchmark/codec_smoke.dart -o build/codec_smoke.js
+          dart compile wasm benchmark/codec_smoke.dart -o build/codec_smoke.wasm
+
+  # TEST: full suite against the authoritative Rust oracle.
+  oracle:
+    name: test (Rust oracle)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dart-lang/setup-dart@v1
+        with:
+          sdk: 3.13.5
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Build the Rust oracle
+        run: cargo build --release --locked --manifest-path tool/oracle_rust/Cargo.toml
+      - run: dart pub get
+      - name: Full suite with the authoritative oracle
+        env:
+          BROTLI_ORACLE: ${{ github.workspace }}/tool/oracle_rust/target/release/brotli-oracle
+        run: dart test
+
+  # ---------------------------------------------------------------------------
+  # BENCHMARK: only after every TEST job is green.
+  # ---------------------------------------------------------------------------
+  benchmark:
+    name: benchmark
+    needs: [test, web, oracle]
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dart-lang/setup-dart@v1
+        with:
+          sdk: 3.13.5
+      - uses: dtolnay/rust-toolchain@stable
+      # benchmark_test runs --compile js/wasm through `dart test -p node`.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - run: dart pub get
+      - name: Build the Rust oracle
+        run: cargo build --release --locked --manifest-path tool/oracle_rust/Cargo.toml
+      - name: Generate the benchmark corpus
+        run: dart run benchmark/gen_corpus.dart build/benchmark_test/corpus
+      - name: Run the Rust oracle benchmark
+        run: |
+          set -euo pipefail
+          tool/oracle_rust/target/release/brotli-oracle bench \
+            -i build/benchmark_test/corpus/text.bin --label text \
+            -i build/benchmark_test/corpus/binary.bin --label binary \
+            -q 5 -w 22 --rounds 5 \
+            --jsonl build/benchmark_test/rust.jsonl
+      - name: Run the Dart benchmark suite
+        run: |
+          set -euo pipefail
+          mkdir -p build/benchmark_test
+          for target in jit aot js wasm; do
+            dart run benchmark_test --compile "$target" --output jsonl \
+              benchmark/brotli_benchmark_test.dart 2>/dev/null \
+              | grep '^{' > "build/benchmark_test/brotli_$target.jsonl"
+          done
+      - name: Normalize both implementations
+        run: |
+          dart run benchmark/normalize_bench.dart \
+            --dart-dir build/benchmark_test \
+            --rust build/benchmark_test/rust.jsonl \
+            --out-dir build/benchmark_test/normalized
+      - name: Render the comparison card
+        uses: unk-404/benchmark_svg@master
+        with:
+          config: benchmark/bench-svg.toml
+          out: assets/benchmarks.svg
+          font: quicksand
+      - name: Verify the SVG
+        run: |
+          test -s assets/benchmarks.svg
+          head -c 5 assets/benchmarks.svg | grep -q '<?xml'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: benchmark-svg
+          path: assets/benchmarks.svg
+          if-no-files-found: error
+
+  # ---------------------------------------------------------------------------
+  # UPLOAD: commit the charts to the repository without triggering CI again.
+  # ---------------------------------------------------------------------------
+  publish:
+    name: publish benchmark charts
+    needs: benchmark
+    if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+      - uses: actions/download-artifact@v4
+        with:
+          name: benchmark-svg
+          path: assets
+      - name: Commit changed charts ([skip ci])
+        run: |
+          set -euo pipefail
+          git config pull.rebase true
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add assets/benchmarks.svg
+          if git diff --cached --quiet; then
+            echo "charts unchanged"
+            exit 0
+          fi
+          git commit -m "chore(bench): refresh charts [skip ci]"
+          git push

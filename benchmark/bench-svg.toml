@@ -1,0 +1,45 @@
+# Core comparison card: identical operations, five implementations.
+# Inputs are normalized to bytes/s by benchmark/normalize_bench.dart.
+
+[render]
+title = "brotli_neo vs Rust brotli"
+subtitle = "1 MiB payloads · quality 5"
+theme = "pastel"
+bar_scale = "row"
+bar_curve = "log"
+missing = "skip"
+max_rows = 8
+card_height = 46.0
+
+[[series]]
+label = "Dart JIT"
+input = "build/benchmark_test/normalized/dart_jit.jsonl"
+format = "jsonl"
+
+[[series]]
+label = "Dart AOT"
+input = "build/benchmark_test/normalized/dart_aot.jsonl"
+format = "jsonl"
+
+[[series]]
+label = "Dart JS"
+input = "build/benchmark_test/normalized/dart_js.jsonl"
+format = "jsonl"
+color = "#8CB8F0"
+
+[[series]]
+label = "Dart WASM"
+input = "build/benchmark_test/normalized/dart_wasm.jsonl"
+format = "jsonl"
+color = "#E8A87C"
+
+[[series]]
+label = "Rust oracle"
+input = "build/benchmark_test/normalized/rust.jsonl"
+format = "jsonl"
+color = "#9CC5A1"
+
+[[row]]
+match = '^(decode|encode)\.(text|binary)\.1024KiB\.q5$'
+label = "$1 $2 · Q5 · 1 MiB"
+unit = "B/s"

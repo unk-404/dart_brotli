@@ -1,39 +1,78 @@
-<!--
-This README describes the package. If you publish this package to pub.dev,
-this README's contents appear on the landing page for your package.
+# brotli_neo
 
-For information about how to write a good package README, see the guide for
-[writing package pages](https://dart.dev/tools/pub/writing-package-pages).
+Pure Dart Brotli (RFC 7932) encoder and decoder.
 
-For general information about developing packages, see the Dart guide for
-[creating packages](https://dart.dev/tools/pub/create-packages)
-and the Flutter guide for
-[developing packages and plugins](https://flutter.dev/to/develop-packages).
--->
+![brotli_neo vs Rust brotli: decode/encode, 1 MiB, Q5](https://raw.githubusercontent.com/unk-404/dart_brotli/master/assets/benchmarks.svg)
 
-TODO: Put a short description of the package here that helps potential users
-know whether this package might be useful for them.
+- **Pure Dart**: no native assets, no FFI in the codec, works on the VM and on
+  the web (dart2js / dart2wasm).
+- **Zero-copy bytes**: first-class [`blit`](https://pub.dev/packages/blit)
+  integration (`Bytes`, `BytesLike`, `BytesMut`, `BytesFile`).
+- **Implemented**: RFC 7932 decoder (static dictionary, 121 transforms,
+  large-window decode), encoder quality 0–11, streaming decoder, and both the
+  blit-native and compat APIs. Compound/shared dictionaries and large-window
+  encoding are the remaining extensions (see `CHANGELOG.md`).
+- **Two API layers**:
+  - `brotli_neo.dart`: blit-native (`BytesLike` in, `Bytes` out);
+  - `compat.dart`: `Uint8List`/`List<int>`, `dart:convert` codec and
+    `package:brotli`-style functions.
 
-## Features
-
-TODO: List what your package can do. Maybe include images, gifs, or videos.
+> Status: 0.1.0. The decoder is byte-exact on all 22 RFC corpus pairs; the
+> encoder covers quality 0–11 and the public streaming/compat/file APIs are
+> usable. CI runs the VM, browser, Wasm and Rust-oracle suites.
 
 ## Getting started
 
-TODO: List prerequisites and provide or point to information on how to
-start using the package.
-
-## Usage
-
-TODO: Include short and useful examples for package users. Add longer examples
-to `/example` folder.
-
-```dart
-const like = 'sample';
+```yaml
+dependencies:
+  brotli_neo: ^0.1.0
 ```
 
-## Additional information
+```dart
+import 'package:brotli_neo/brotli_neo.dart';
 
-TODO: Tell users more about the package: where to find more information, how to
-contribute to the package, how to file issues, what response they can expect
-from the package authors, and more.
+final compressed = brotliEncode(Bytes.fromList([1, 2, 3, 4]));
+final raw = brotliDecode(compressed);
+```
+
+For a `Uint8List` API:
+
+```dart
+import 'package:brotli_neo/compat.dart';
+
+final compressed = brotliCompress(Uint8List.fromList([1, 2, 3, 4]));
+final raw = brotliDecompress(compressed);
+```
+
+## Development
+
+```sh
+dart pub get
+dart analyze
+dart test
+```
+
+CI runs Ubuntu/Windows/macOS, Chrome browser tests, the JS/Wasm compiles and the
+full suite against the Rust oracle (`tool/oracle_rust`). The oracle-backed tests
+read its executable path from `BROTLI_ORACLE` and skip when it is unset.
+
+### Conformance data
+
+`test/testdata` contains the 22 raw/compressed pairs and 23 malformed variants
+from [google/brotli](https://github.com/google/brotli) `tests/testdata` (MIT).
+`manifest.json` records sizes and SHA-256 hashes. See `NOTICE` for attribution.
+
+### Benchmarks
+
+Four core operations (decode/encode on 1 MiB text and binary at quality 5) are
+measured with [`benchmark_test`](https://pub.dev/packages/benchmark_test) for
+Dart JIT/AOT/JS/WASM and for the authoritative Rust `brotli` crate. The five
+series are normalized to bytes/second and rendered with
+[`benchmark_svg`](https://github.com/unk-404/benchmark_svg) into the card above.
+The single CI workflow runs the tests first, then the benchmark, then commits
+the changed SVG to `assets/` with `[skip ci]`.
+
+## License
+
+MIT. The static dictionary, context table and test corpus are derived from
+Google's Brotli reference implementation (MIT); see `LICENSE` and `NOTICE`.

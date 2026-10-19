@@ -1,8 +1,13 @@
-/// Support for doing something awesome.
+/// Pure Dart Brotli (RFC 7932) encoder and decoder.
 ///
-/// More dartdocs go here.
+/// The primary API is blit-native: inputs are [BytesLike] and outputs are
+/// [Bytes]. For a `Uint8List`/`List<int>` API, import `compat.dart`.
 library;
 
-export 'src/brotli_neo_base.dart';
+export 'package:blit/bytes.dart' show Bytes, BytesLike, BytesMut;
 
-// TODO: Export any libraries intended for clients of this package.
+export 'src/blit_api.dart';
+export 'src/common/errors.dart';
+export 'src/decoder/decoder.dart';
+export 'src/encoder/encoder.dart';
+export 'src/options.dart';
