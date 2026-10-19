@@ -14,7 +14,7 @@ concurrency:
 
 jobs:
   # ---------------------------------------------------------------------------
-  # TEST: platform matrix. Oracle-backed tests skip without BROTLI_ORACLE.
+  # TEST: platform matrix with the authoritative Rust oracle.
   # ---------------------------------------------------------------------------
   test:
     name: test (${{ matrix.os }})
