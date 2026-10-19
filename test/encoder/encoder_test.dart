@@ -254,27 +254,39 @@ void main() {
         options: const BrotliEncodeOptions(lgwin: 1),
       );
       expect(_BitReader(low).readWindowBits(), 10);
-      final high = brotliCompress(
-        input,
-        options: const BrotliEncodeOptions(lgwin: 30),
-      );
-      expect(_BitReader(high).readWindowBits(), 24);
-    });
-
-    test('large-window requests are rejected', () {
+      // A window above 24 needs an explicit opt-in.
       expect(
         () => brotliCompress(
-          Uint8List.fromList(<int>[1, 2, 3]),
-          options: const BrotliEncodeOptions(lgwin: 30, largeWindow: true),
+          input,
+          options: const BrotliEncodeOptions(lgwin: 30),
         ),
-        throwsUnsupportedError,
+        throwsA(isA<BrotliException>()),
       );
+    });
+
+    test('large-window requests need the opt-in flag', () {
       // lgwin <= 24 with largeWindow set still produces a regular stream.
+      final input = Uint8List.fromList(<int>[1, 2, 3]);
       final out = brotliCompress(
-        Uint8List.fromList(<int>[1, 2, 3]),
+        input,
         options: const BrotliEncodeOptions(lgwin: 22, largeWindow: true),
       );
       expect(_BitReader(out).readWindowBits(), 22);
+      // lgwin 25..30 with largeWindow is a non-RFC large-window stream; the
+      // header and round-trip are covered by `large_window_test.dart`.
+      final large = brotliCompress(
+        input,
+        options: const BrotliEncodeOptions(lgwin: 30, largeWindow: true),
+      );
+      expect(large, isNotEmpty);
+      expect(
+        brotliDecompress(
+          large,
+          options: const BrotliDecodeOptions(allowLargeWindow: true),
+        ),
+        orderedEquals(input),
+      );
+      expect(() => brotliDecompress(large), throwsA(isA<BrotliException>()));
     });
 
     test('meta-block framing is structurally valid for boundary sizes', () {

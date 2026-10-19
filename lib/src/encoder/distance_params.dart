@@ -26,6 +26,7 @@ library;
 
 import 'dart:typed_data';
 
+import '../common/format_tables.dart' as tables;
 import 'block_split.dart' show histogramCost;
 import 'command.dart';
 
@@ -38,16 +39,36 @@ const int kMaxNdirect = 120;
 /// Number of distance bits in a regular (non-large-window) stream.
 const int kMaxDistanceBits = 24;
 
+/// Number of distance bits used for large-window streams (lgwin 25..30).
+///
+/// The reference reads large-window distance trees over this many bits worth of
+/// symbols (BROTLI_LARGE_MAX_DISTANCE_BITS); distances themselves are bounded
+/// by maxAllowedDistance.
+const int kMaxLargeDistanceBits = 62;
+
 /// One `(NPOSTFIX, NDIRECT)` choice and the derived quantities.
 final class DistanceParams {
   /// Creates a parameter pair and derives its alphabet / distance limit.
-  DistanceParams(this.npostfix, this.ndirect)
-    : assert(npostfix >= 0 && npostfix <= kMaxNpostfix),
-      assert(ndirect >= 0 && ndirect <= kMaxNdirect),
-      assert((ndirect >> npostfix) << npostfix == ndirect, 'ndirect must be a '
-          'multiple of 1 << npostfix'),
-      alphabetSize = distanceAlphabetSize(npostfix, ndirect),
-      maxDistance = distanceMaxValue(npostfix, ndirect);
+  ///
+  /// [maxDistanceBits] is 24 for regular streams and 30 for large-window
+  /// streams; it widens the distance alphabet and the largest representable
+  /// distance. The alphabet never exceeds the decoder's limit for
+  /// maxAllowedDistance (distanceAlphabetLimit).
+  DistanceParams(
+    this.npostfix,
+    this.ndirect, {
+    this.maxDistanceBits = kMaxDistanceBits,
+  }) : assert(npostfix >= 0 && npostfix <= kMaxNpostfix),
+       assert(ndirect >= 0 && ndirect <= kMaxNdirect),
+       assert((ndirect >> npostfix) << npostfix == ndirect, 'ndirect must be a '
+           'multiple of 1 << npostfix'),
+       alphabetSize = _alphabetSize(npostfix, ndirect, maxDistanceBits),
+       maxDistance = maxDistanceBits <= kMaxDistanceBits
+           ? distanceMaxValue(npostfix, ndirect)
+           : tables.maxAllowedDistance;
+
+  /// Distance bits this parameter pair was derived for (24 or 30).
+  final int maxDistanceBits;
 
   /// Extra low bits taken from the distance instead of the extra-bit field.
   final int npostfix;
@@ -73,10 +94,21 @@ final DistanceParams kDefaultDistanceParams = DistanceParams(0, 0);
 
 /// Distance alphabet size (`BROTLI_DISTANCE_ALPHABET_SIZE`).
 ///
-/// `16 + NDIRECT + (24 << (NPOSTFIX + 1))`: 16 short codes, the direct codes
-/// and `(24 - NPOSTFIX)` extra-bit widths for each postfix class.
-int distanceAlphabetSize(int npostfix, int ndirect) =>
-    numDistanceShortCodes + ndirect + (kMaxDistanceBits << (npostfix + 1));
+/// `16 + NDIRECT + (maxDistanceBits << (NPOSTFIX + 1))`: 16 short codes, the
+/// direct codes and one extra-bit width per distance group per postfix class.
+int distanceAlphabetSize(
+  int npostfix,
+  int ndirect, [
+  int maxDistanceBits = kMaxDistanceBits,
+]) => numDistanceShortCodes + ndirect + (maxDistanceBits << (npostfix + 1));
+
+/// Alphabet size used by [DistanceParams], clamped to the decoder's limit.
+int _alphabetSize(int npostfix, int ndirect, int maxDistanceBits) {
+  // The reference reads large-window distance trees over
+  // BROTLI_DISTANCE_ALPHABET_SIZE(..., BROTLI_LARGE_MAX_DISTANCE_BITS) symbols
+  // (140 for (0, 0)), not over the reachable-code limit.
+  return distanceAlphabetSize(npostfix, ndirect, maxDistanceBits);
+}
 
 /// Largest distance expressible with [npostfix]/[ndirect].
 int distanceMaxValue(int npostfix, int ndirect) =>
@@ -138,8 +170,13 @@ double distanceCost(CommandBuffer commands, DistanceParams params) {
 /// keeps the cheapest pair; the inner loop stops at the first candidate that is
 /// worse than the best so far, and the next `NPOSTFIX` starts from half the
 /// previous `NDIRECT`, exactly like the reference search.
-DistanceParams chooseDistanceParams(CommandBuffer commands) {
-  var best = kDefaultDistanceParams;
+DistanceParams chooseDistanceParams(
+  CommandBuffer commands, {
+  int maxDistanceBits = kMaxDistanceBits,
+}) {
+  var best = maxDistanceBits <= kMaxDistanceBits
+      ? kDefaultDistanceParams
+      : DistanceParams(0, 0, maxDistanceBits: maxDistanceBits);
   var bestCost = distanceCost(commands, best);
   if (commands.count == 0) return best;
   var ndirectMsb = 0;
@@ -148,7 +185,11 @@ DistanceParams chooseDistanceParams(CommandBuffer commands) {
       final ndirect = ndirectMsb << npostfix;
       // The parameter pair must be representable in the header.
       if (ndirect > kMaxNdirect) break;
-      final candidate = DistanceParams(npostfix, ndirect);
+      final candidate = DistanceParams(
+        npostfix,
+        ndirect,
+        maxDistanceBits: maxDistanceBits,
+      );
       final cost = distanceCost(commands, candidate);
       if (cost == double.infinity || cost > bestCost) break;
       bestCost = cost;

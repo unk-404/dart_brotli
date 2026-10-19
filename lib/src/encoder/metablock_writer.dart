@@ -35,6 +35,7 @@ import '../common/bit_utils.dart';
 import 'bit_writer.dart';
 import 'command.dart';
 import 'context_modeling.dart';
+import 'distance_params.dart';
 import 'huffman_encoder.dart';
 
 /// Largest meta-block length allowed by RFC 7932.
@@ -100,13 +101,10 @@ final class MetaBlockWriter {
     : _huffman = HuffmanEncoder(),
       _literalHistogram = Uint32List(kMaxLiteralTrees * numLiteralSymbols),
       _commandHistogram = Uint32List(numCommandSymbols),
-      _distanceHistogram = Uint32List(numDistanceSymbols),
       _literalDepth = Uint8List(kMaxLiteralTrees * numLiteralSymbols),
       _literalBits = Uint16List(kMaxLiteralTrees * numLiteralSymbols),
       _commandDepth = Uint8List(numCommandSymbols),
       _commandBits = Uint16List(numCommandSymbols),
-      _distanceDepth = Uint8List(numDistanceSymbols),
-      _distanceBits = Uint16List(numDistanceSymbols),
       _contextMapHistogram = Uint32List(_kContextMapAlphabetSize),
       _contextMapDepth = Uint8List(_kContextMapAlphabetSize),
       _contextMapBits = Uint16List(_kContextMapAlphabetSize),
@@ -117,13 +115,15 @@ final class MetaBlockWriter {
   final HuffmanEncoder _huffman;
   final Uint32List _literalHistogram;
   final Uint32List _commandHistogram;
-  final Uint32List _distanceHistogram;
+  // Distance histograms/trees can be wider than 64 symbols for large-window
+  // streams, so they grow on demand (DistanceParams.alphabetSize).
+  Uint32List _distanceHistogram = Uint32List(numDistanceSymbols);
   final Uint8List _literalDepth;
   final Uint16List _literalBits;
   final Uint8List _commandDepth;
   final Uint16List _commandBits;
-  final Uint8List _distanceDepth;
-  final Uint16List _distanceBits;
+  Uint8List _distanceDepth = Uint8List(numDistanceSymbols);
+  Uint16List _distanceBits = Uint16List(numDistanceSymbols);
 
   // Context-map encoding scratch.
   final Uint32List _contextMapHistogram;
@@ -149,8 +149,16 @@ final class MetaBlockWriter {
     CommandBuffer commands, {
     required bool isLast,
     LiteralContextModel? contexts,
+    DistanceParams? distanceParams,
   }) {
     assert(length > 0 && length <= kMaxMetaBlockLength);
+    final distanceAlphabet =
+        (distanceParams ?? kDefaultDistanceParams).alphabetSize;
+    if (_distanceHistogram.length < distanceAlphabet) {
+      _distanceHistogram = Uint32List(distanceAlphabet);
+      _distanceDepth = Uint8List(distanceAlphabet);
+      _distanceBits = Uint16List(distanceAlphabet);
+    }
     final model = (contexts != null && contexts.numClusters > 1)
         ? contexts
         : null;
@@ -205,8 +213,8 @@ final class MetaBlockWriter {
     );
     _huffman.buildAndStore(
       _distanceHistogram,
-      numDistanceSymbols,
-      numDistanceSymbols,
+      distanceAlphabet,
+      distanceAlphabet,
       writer,
       _distanceDepth,
       _distanceBits,

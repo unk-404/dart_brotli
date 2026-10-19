@@ -49,6 +49,7 @@ import 'dart:typed_data';
 
 import 'package:blit/bytes.dart';
 
+import '../common/errors.dart';
 import '../options.dart';
 import 'backward_references.dart';
 import 'bit_writer.dart';
@@ -68,6 +69,9 @@ const int _kMinLgwin = 10;
 
 /// Largest regular (non-large-window) RFC 7932 window size.
 const int _kMaxLgwin = 24;
+
+/// Largest window accepted by the large-window extension (25..30).
+const int _kMaxLargeLgwin = 30;
 
 /// Input block size for quality 0 (fast, 4-byte minimum match).
 const int kQuality0BlockSize = 1 << 16;
@@ -223,13 +227,16 @@ Uint8List brotliCompress(
 }) {
   final quality = _clamp(options.quality, 0, 11);
   assert(quality >= 0 && quality <= 11);
-
-  if (options.largeWindow && options.lgwin > _kMaxLgwin) {
-    throw UnsupportedError(
-      'Large-window Brotli streams (lgwin > $_kMaxLgwin) are not supported',
+  final largeWindow = options.largeWindow;
+  if (!largeWindow && options.lgwin > _kMaxLgwin) {
+    throw BrotliException(
+      BrotliErrorCode.unsupportedFeature,
+      'lgwin ${options.lgwin} needs largeWindow: true (large-window streams) ',
     );
   }
-  final lgwin = _clamp(options.lgwin, _kMinLgwin, _kMaxLgwin);
+  final lgwin = largeWindow
+      ? _clamp(options.lgwin, _kMinLgwin, _kMaxLargeLgwin)
+      : _clamp(options.lgwin, _kMinLgwin, _kMaxLgwin);
 
   if (input.isEmpty) {
     // For any configured window, [0x06] = window 16 + `11` empty last block.
@@ -237,7 +244,7 @@ Uint8List brotliCompress(
   }
 
   final writer = BitWriter(initialCapacity: input.length + 16);
-  _writeWindowBits(writer, lgwin);
+  _writeWindowBits(writer, lgwin, largeWindow: largeWindow && lgwin > _kMaxLgwin);
 
   if (quality <= 1) {
     _writeGreedyCompressedBlocks(writer, input, quality, lgwin);
@@ -281,7 +288,14 @@ int maxCompressedSize(int inputSize) {
 }
 
 /// Writes the RFC 7932 window-bits header for [lgwin] (`10..24`).
-void _writeWindowBits(BitWriter writer, int lgwin) {
+void _writeWindowBits(BitWriter writer, int lgwin, {bool largeWindow = false}) {
+  if (largeWindow && lgwin > _kMaxLgwin) {
+    // Non-RFC large-window extension: 14 bits ((lgwin & 0x3F) << 8) | 0x11.
+    // Bit layout: 1 (not 16), 000 (no 17..24 code), 001 (large window),
+    // 0 (reserved), then the 6-bit window size.
+    writer.writeBits(14, ((lgwin & 0x3F) << 8) | 0x11);
+    return;
+  }
   if (lgwin == 16) {
     writer.writeBits(1, 0);
   } else if (lgwin == 17) {
@@ -376,6 +390,7 @@ void _writeGreedyCompressedBlocks(
 }) {
   final blockSize = quality == 0 ? kQuality0BlockSize : kQuality1BlockSize;
   final maxDistance = (1 << lgwin) - windowGap;
+  final distanceParams = _distanceParamsForLgwin(lgwin);
   final state = continuation ?? _GreedyState.forQuality(quality, blockSize);
   final finder = state.finder;
   final commands = state.commands;
@@ -415,6 +430,7 @@ void _writeGreedyCompressedBlocks(
       length,
       commands,
       isLast: false,
+      distanceParams: distanceParams,
     );
     final compressedBits = writer.bitPosition - mark;
     if (compressedBits > uncompressedMetaBlockBits(length, mark)) {
@@ -458,6 +474,14 @@ void _writeChainCompressedBlocks(
 }) {
   const blockSize = kChainBlockSize;
   final maxBackwardLimit = (1 << lgwin) - windowGap;
+  // Large-window streams carry up to 30-bit distances and need a wider
+  // distance alphabet; regular streams keep the 64-symbol alphabet.
+  final distanceMaxBits = lgwin > _kMaxLgwin
+      ? kMaxLargeDistanceBits
+      : kMaxDistanceBits;
+  final defaultParams = distanceMaxBits <= kMaxDistanceBits
+      ? kDefaultDistanceParams
+      : DistanceParams(0, 0, maxDistanceBits: distanceMaxBits);
   final useContexts = quality >= kMinQualityForContextModeling;
   final useBlockSplitting = quality >= kMinQualityForBlockSplitting;
   final useGuidedParsing = quality >= kMinQualityForGuidedParsing;
@@ -514,7 +538,7 @@ void _writeChainCompressedBlocks(
     var bestKind = 0;
     var bestParse = 0;
     MetaBlockSplit? bestSplit;
-    var bestParams = kDefaultDistanceParams;
+    var bestParams = defaultParams;
     var bestRle = false;
     var bestBits = -1;
     var wroteCandidate = false;
@@ -547,6 +571,7 @@ void _writeChainCompressedBlocks(
           length,
           cmds,
           isLast: false,
+          distanceParams: defaultParams,
         );
       }, 0, parseIndex);
       if (contextModel != null) {
@@ -559,6 +584,7 @@ void _writeChainCompressedBlocks(
             cmds,
             isLast: false,
             contexts: contextModel,
+            distanceParams: defaultParams,
           );
         }, 1, parseIndex);
       }
@@ -567,17 +593,16 @@ void _writeChainCompressedBlocks(
       // analysis cannot change the outcome.
       if (!useBlockSplitting || bestBits >= uncompressedBits) return;
       final searched = useDistanceParams
-          ? chooseDistanceParams(cmds)
-          : kDefaultDistanceParams;
+          ? chooseDistanceParams(cmds, maxDistanceBits: distanceMaxBits)
+          : defaultParams;
       // Only pay for a second split analysis when the search actually found a
       // cheaper distance coding; equal-cost pairs keep the default.
       final searchedIsBetter =
           !searched.isDefault &&
-          distanceCost(cmds, searched) <
-              distanceCost(cmds, kDefaultDistanceParams);
+          distanceCost(cmds, searched) < distanceCost(cmds, defaultParams);
       final paramOptions = searchedIsBetter
-          ? <DistanceParams>[kDefaultDistanceParams, searched]
-          : <DistanceParams>[kDefaultDistanceParams];
+          ? <DistanceParams>[defaultParams, searched]
+          : <DistanceParams>[defaultParams];
       for (final params in paramOptions) {
         final candidate = buildMetaBlockSplit(
           input,
@@ -669,6 +694,7 @@ void _writeChainCompressedBlocks(
           length,
           winner.commands,
           isLast: false,
+          distanceParams: defaultParams,
         );
       case 1:
         metaBlockWriter.store(
@@ -679,6 +705,7 @@ void _writeChainCompressedBlocks(
           winner.commands,
           isLast: false,
           contexts: contextModel,
+          distanceParams: defaultParams,
         );
       default:
         splitWriter.store(
@@ -709,6 +736,16 @@ void _writeChainCompressedBlocks(
     offset += length;
   }
 }
+
+/// Distance parameters (and thus the distance alphabet) for [lgwin].
+DistanceParams _distanceParamsForLgwin(int lgwin) =>
+    lgwin > _kMaxLgwin
+    ? DistanceParams(0, 0, maxDistanceBits: kMaxLargeDistanceBits)
+    : kDefaultDistanceParams;
+
+int _normalizeLgwin(BrotliEncodeOptions options) => options.largeWindow
+    ? _clamp(options.lgwin, _kMinLgwin, _kMaxLargeLgwin)
+    : _clamp(options.lgwin, _kMinLgwin, _kMaxLgwin);
 
 Int32List _snapshotDistanceCache(Int32List cache) => Int32List.fromList(<int>[
   cache[0],
@@ -748,17 +785,24 @@ final class BrotliEncoder {
   /// Creates an encoder for the given [options].
   BrotliEncoder({BrotliEncodeOptions options = const BrotliEncodeOptions()})
     : _quality = _clamp(options.quality, 0, 11),
-      _lgwin = _clamp(options.lgwin, _kMinLgwin, _kMaxLgwin) {
-    if (options.largeWindow && options.lgwin > _kMaxLgwin) {
-      throw UnsupportedError(
-        'Large-window Brotli streams (lgwin > $_kMaxLgwin) are not supported',
+      _largeWindow = options.largeWindow,
+      _lgwin = _normalizeLgwin(options) {
+    if (!_largeWindow && options.lgwin > _kMaxLgwin) {
+      throw BrotliException(
+        BrotliErrorCode.unsupportedFeature,
+        'lgwin ${options.lgwin} needs largeWindow: true (large-window streams)',
       );
     }
-    _writeWindowBits(_writer, _lgwin);
+    _writeWindowBits(
+      _writer,
+      _lgwin,
+      largeWindow: _largeWindow && _lgwin > _kMaxLgwin,
+    );
   }
 
   final int _quality;
   final int _lgwin;
+  final bool _largeWindow;
   final BitWriter _writer = BitWriter(initialCapacity: 1 << 12);
   _GreedyState? _greedy;
   _ChainState? _chain;

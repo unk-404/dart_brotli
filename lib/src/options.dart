@@ -18,8 +18,10 @@ enum BrotliStatus {
 
 /// Encoder options.
 ///
-/// [quality] is `0..11`; [lgwin] is `10..24` for RFC 7932 streams. [lgblock]
-/// is `0` (auto) or `16..24`. The encoder normalizes out-of-range values.
+/// [quality] is `0..11`; [lgwin] is `10..24` for RFC 7932 streams and `25..30`
+/// when [largeWindow] is set (non-RFC large-window extension). Values outside
+/// the accepted range are clamped, except `lgwin > 24` without [largeWindow],
+/// which throws. [lgblock] is `0` (auto) or `16..24`.
 final class BrotliEncodeOptions {
   const BrotliEncodeOptions({
     this.quality = 5,
