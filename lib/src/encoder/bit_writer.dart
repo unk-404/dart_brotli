@@ -59,6 +59,19 @@ final class BitWriter {
   /// Whether the writer is currently on a byte boundary.
   bool get isByteAligned => _accBits == 0;
 
+  /// Returns the complete bytes written so far and drops them from the buffer.
+  ///
+  /// Bits that do not yet fill a byte stay pending, so the caller can hand out
+  /// finished stream bytes while the writer keeps its sub-byte state (this is
+  /// what the streaming encoder's 	akeOutput uses). The returned array is a
+  /// copy: later writes never modify it.
+  Uint8List takeCompleteBytes() {
+    if (_length == 0) return Uint8List(0);
+    final bytes = Uint8List.fromList(Uint8List.sublistView(_buffer, 0, _length));
+    _length = 0;
+    return bytes;
+  }
+
   /// Discards all written data and resets the writer.
   void reset() {
     _length = 0;

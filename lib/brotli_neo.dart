@@ -10,4 +10,5 @@ export 'src/blit_api.dart';
 export 'src/common/errors.dart';
 export 'src/decoder/decoder.dart';
 export 'src/encoder/encoder.dart';
+export 'src/encoder/streaming_encoder.dart' show BrotliEncoder;
 export 'src/options.dart';

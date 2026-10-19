@@ -9,4 +9,5 @@ export 'src/compat/codec.dart';
 export 'src/decoder/decoder.dart'
     show BrotliDecoder, BytesInputQueue, brotliDecompress;
 export 'src/encoder/encoder.dart' show brotliCompress, maxCompressedSize;
+export 'src/encoder/streaming_encoder.dart' show BrotliEncoder;
 export 'src/options.dart';

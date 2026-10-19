@@ -47,6 +47,8 @@ library;
 
 import 'dart:typed_data';
 
+import 'package:blit/bytes.dart';
+
 import '../options.dart';
 import 'backward_references.dart';
 import 'bit_writer.dart';
@@ -291,28 +293,99 @@ void _writeWindowBits(BitWriter writer, int lgwin) {
   }
 }
 
+/// Persistent state of the greedy block loop (qualities 0/1).
+///
+/// The [BrotliEncoder] keeps one of these alive so consecutive [add]/[flush]
+/// calls continue the same stream with the same match finder and distance
+/// cache.
+final class _GreedyState {
+  _GreedyState({
+    required this.finder,
+    required this.commands,
+    required this.metaBlockWriter,
+    required this.distCache,
+  });
+
+  /// Creates the state for [quality] ( /1), sized for [blockSize].
+  factory _GreedyState.forQuality(int quality, int blockSize) {
+    final minMatch = quality == 0 ? 4 : 6;
+    return _GreedyState(
+      finder: MatchFinder(
+        tableBits: quality == 0 ? 16 : 17,
+        minMatch: minMatch,
+      ),
+      // A copy always covers at least `minMatch` bytes, so this capacity can
+      // never be exceeded; the extra entries cover the trailing insert-only
+      // command.
+      commands: CommandBuffer(blockSize ~/ minMatch + 2),
+      metaBlockWriter: MetaBlockWriter(),
+      distCache: createInitialDistanceCache(),
+    );
+  }
+
+  final MatchFinder finder;
+  final CommandBuffer commands;
+  final MetaBlockWriter metaBlockWriter;
+  final Int32List distCache;
+}
+
+/// Persistent state of the chain block loop (qualities 2..11).
+final class _ChainState {
+  _ChainState({
+    required this.hasher,
+    required this.commands,
+    required this.metaBlockWriter,
+    required this.splitWriter,
+    required this.distCache,
+  });
+
+  /// Creates the state for [quality] (2..11), sized for [blockSize].
+  factory _ChainState.forQuality(int quality, int blockSize) {
+    final params = chainParamsForQuality(quality);
+    return _ChainState(
+      hasher: HashChainMatcher(
+        bucketBits: params.bucketBits,
+        blockBits: params.blockBits,
+        numLastDistances: params.numLastDistances,
+      ),
+      // A copy covers at least 2 bytes, so this capacity can never be
+      // exceeded.
+      commands: CommandBuffer(blockSize ~/ 2 + 2),
+      metaBlockWriter: MetaBlockWriter(),
+      splitWriter: SplitMetaBlockWriter(),
+      distCache: createSearchDistanceCache(),
+    );
+  }
+
+  final HashChainMatcher hasher;
+  final CommandBuffer commands;
+  final MetaBlockWriter metaBlockWriter;
+  final SplitMetaBlockWriter splitWriter;
+  final Int32List distCache;
+}
+
 /// Quality 0/1 strategy: greedy LZ77 blocks with dynamic Huffman trees.
 void _writeGreedyCompressedBlocks(
   BitWriter writer,
   Uint8List input,
   int quality,
-  int lgwin,
-) {
+  int lgwin, {
+  int start = 0,
+  int? end,
+  _GreedyState? continuation,
+}) {
   final blockSize = quality == 0 ? kQuality0BlockSize : kQuality1BlockSize;
-  final tableBits = quality == 0 ? 16 : 17;
-  final minMatch = quality == 0 ? 4 : 6;
   final maxDistance = (1 << lgwin) - windowGap;
+  final state = continuation ?? _GreedyState.forQuality(quality, blockSize);
+  final finder = state.finder;
+  final commands = state.commands;
+  final metaBlockWriter = state.metaBlockWriter;
+  final distCache = state.distCache;
 
-  final finder = MatchFinder(tableBits: tableBits, minMatch: minMatch);
-  // A copy always covers at least `minMatch` bytes, so this capacity can never
-  // be exceeded; the extra entries cover the trailing insert-only command.
-  final commands = CommandBuffer(blockSize ~/ minMatch + 2);
-  final metaBlockWriter = MetaBlockWriter();
-  final distCache = createInitialDistanceCache();
-
-  var offset = 0;
-  while (offset < input.length) {
-    final remaining = input.length - offset;
+  final stop = end ?? input.length;
+  var offset = start;
+  while (offset < stop) {
+    final remaining = stop - offset;
     final length = remaining < blockSize ? remaining : blockSize;
 
     // The distance cache is decoder state: if this block is stored
@@ -378,9 +451,11 @@ void _writeChainCompressedBlocks(
   BitWriter writer,
   Uint8List input,
   int quality,
-  int lgwin,
-) {
-  final params = chainParamsForQuality(quality);
+  int lgwin, {
+  int start = 0,
+  int? end,
+  _ChainState? continuation,
+}) {
   const blockSize = kChainBlockSize;
   final maxBackwardLimit = (1 << lgwin) - windowGap;
   final useContexts = quality >= kMinQualityForContextModeling;
@@ -390,20 +465,17 @@ void _writeChainCompressedBlocks(
   final optimizeHistograms = quality >= kMinQualityForOptimizedHistograms;
   final extensiveSearch = quality >= kMinQualityForExtensiveSearch;
 
-  final hasher = HashChainMatcher(
-    bucketBits: params.bucketBits,
-    blockBits: params.blockBits,
-    numLastDistances: params.numLastDistances,
-  );
-  // A copy covers at least 2 bytes, so this capacity can never be exceeded.
-  final commands = CommandBuffer(blockSize ~/ 2 + 2);
-  final metaBlockWriter = MetaBlockWriter();
-  final splitWriter = SplitMetaBlockWriter();
-  final distCache = createSearchDistanceCache();
+  final state = continuation ?? _ChainState.forQuality(quality, blockSize);
+  final hasher = state.hasher;
+  final commands = state.commands;
+  final metaBlockWriter = state.metaBlockWriter;
+  final splitWriter = state.splitWriter;
+  final distCache = state.distCache;
 
-  var offset = 0;
-  while (offset < input.length) {
-    final remaining = input.length - offset;
+  final stop = end ?? input.length;
+  var offset = start;
+  while (offset < stop) {
+    final remaining = stop - offset;
     final length = remaining < blockSize ? remaining : blockSize;
 
     // The distance cache is decoder state: if this block is stored
@@ -649,4 +721,187 @@ int _clamp(int value, int min, int max) {
   if (value < min) return min;
   if (value > max) return max;
   return value;
+}
+
+/// Push-style streaming Brotli encoder.
+///
+/// ```dart
+/// final encoder = BrotliEncoder();
+/// encoder.add(Bytes.fromUint8List(firstChunk));
+/// final partial = encoder.takeOutput(); // valid data once finished
+/// encoder.finish();
+/// final rest = encoder.takeOutput();
+/// ```
+///
+/// The encoder produces one RFC 7932 stream: [add] appends input, [flush] ends
+/// the current meta-block so the bytes written so far become decodable once the
+/// stream is finished (it does not end the stream), and [finish] writes the
+/// remaining input plus the empty last meta-block. Compressed bytes are handed
+/// out with [takeOutput] whenever a byte boundary has been reached.
+///
+/// The block structure is identical to [brotliCompress]: feeding the whole
+/// input in one [add] followed by [finish] produces exactly the same bytes.
+/// Input is retained (the match finder stores absolute positions), so this API
+/// is about incremental output and flush boundaries rather than bounded
+/// working-set memory.
+final class BrotliEncoder {
+  /// Creates an encoder for the given [options].
+  BrotliEncoder({BrotliEncodeOptions options = const BrotliEncodeOptions()})
+    : _quality = _clamp(options.quality, 0, 11),
+      _lgwin = _clamp(options.lgwin, _kMinLgwin, _kMaxLgwin) {
+    if (options.largeWindow && options.lgwin > _kMaxLgwin) {
+      throw UnsupportedError(
+        'Large-window Brotli streams (lgwin > $_kMaxLgwin) are not supported',
+      );
+    }
+    _writeWindowBits(_writer, _lgwin);
+  }
+
+  final int _quality;
+  final int _lgwin;
+  final BitWriter _writer = BitWriter(initialCapacity: 1 << 12);
+  _GreedyState? _greedy;
+  _ChainState? _chain;
+  Uint8List _input = Uint8List(4096);
+  int _inputLength = 0;
+  int _written = 0;
+  final List<Uint8List> _chunks = <Uint8List>[];
+  int _bytesWritten = 0;
+  bool _finished = false;
+
+  /// Total number of complete compressed bytes produced so far.
+  int get bytesWritten => _bytesWritten;
+
+  /// Whether [finish] has been called.
+  bool get isFinished => _finished;
+
+  int get _blockSize => _quality <= 1
+      ? (_quality == 0 ? kQuality0BlockSize : kQuality1BlockSize)
+      : kChainBlockSize;
+
+  /// Appends [input] to the stream.
+  void add(BytesLike input) => addUint8List(input.asUint8List());
+
+  /// Appends [bytes] to the stream (compat/`Uint8List` entry point).
+  void addUint8List(Uint8List bytes) {
+    _checkOpen('add');
+    if (bytes.isEmpty) return;
+    _append(bytes);
+    _encodeFullBlocks();
+  }
+
+  /// Ends the current meta-block without ending the stream.
+  ///
+  /// The data added since the previous flush (or since the beginning) becomes a
+  /// non-final meta-block, so it is available through [takeOutput].
+  void flush() {
+    _checkOpen('flush');
+    _encodeFullBlocks();
+    if (_inputLength > _written) {
+      _encodeRange(_written, _inputLength);
+    }
+    _collect();
+  }
+
+  /// Finishes the stream: encodes the remaining input and the empty last
+  /// meta-block. After this call [isFinished] is true and [add]/[flush]/[finish]
+  /// throw [StateError].
+  void finish() {
+    _checkOpen('finish');
+    _encodeFullBlocks();
+    if (_inputLength > _written) {
+      _encodeRange(_written, _inputLength);
+    }
+    _writer.writeBits(1, 1); // ISLAST
+    _writer.writeBits(1, 1); // ISEMPTY
+    _writer.alignToByte();
+    _collect();
+    _finished = true;
+  }
+
+  /// Returns the compressed bytes produced since the last call.
+  ///
+  /// Bytes are only complete at a byte boundary; sub-byte state stays inside
+  /// the encoder, so a prefix returned before [finish] is not a full stream but
+  /// is the beginning of one.
+  Bytes takeOutput() => Bytes.fromUint8List(takeOutputBytes());
+
+  /// [takeOutput] for `Uint8List` callers.
+  Uint8List takeOutputBytes() {
+    if (_chunks.isEmpty) return Uint8List(0);
+    var total = 0;
+    for (final chunk in _chunks) {
+      total += chunk.length;
+    }
+    final output = Uint8List(total);
+    var position = 0;
+    for (final chunk in _chunks) {
+      output.setRange(position, position + chunk.length, chunk);
+      position += chunk.length;
+    }
+    _chunks.clear();
+    return output;
+  }
+
+  void _checkOpen(String operation) {
+    if (_finished) {
+      throw StateError('BrotliEncoder.$operation called after finish()');
+    }
+  }
+
+  void _append(Uint8List bytes) {
+    final needed = _inputLength + bytes.length;
+    if (needed > _input.length) {
+      var capacity = _input.isEmpty ? 4096 : _input.length;
+      while (capacity < needed) {
+        capacity *= 2;
+      }
+      final grown = Uint8List(capacity)..setRange(0, _inputLength, _input);
+      _input = grown;
+    }
+    _input.setRange(_inputLength, needed, bytes);
+    _inputLength = needed;
+  }
+
+  void _encodeFullBlocks() {
+    final blockSize = _blockSize;
+    while (_inputLength - _written >= blockSize) {
+      _encodeRange(_written, _written + blockSize);
+      _collect();
+    }
+  }
+
+  void _encodeRange(int start, int end) {
+    if (_quality <= 1) {
+      _greedy ??= _GreedyState.forQuality(_quality, _blockSize);
+      _writeGreedyCompressedBlocks(
+        _writer,
+        _input,
+        _quality,
+        _lgwin,
+        start: start,
+        end: end,
+        continuation: _greedy,
+      );
+    } else {
+      _chain ??= _ChainState.forQuality(_quality, _blockSize);
+      _writeChainCompressedBlocks(
+        _writer,
+        _input,
+        _quality,
+        _lgwin,
+        start: start,
+        end: end,
+        continuation: _chain,
+      );
+    }
+    _written = end;
+  }
+
+  void _collect() {
+    final chunk = _writer.takeCompleteBytes();
+    if (chunk.isEmpty) return;
+    _chunks.add(chunk);
+    _bytesWritten += chunk.length;
+  }
 }
