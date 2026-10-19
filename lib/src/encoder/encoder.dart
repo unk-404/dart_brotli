@@ -59,6 +59,7 @@ import 'context_modeling.dart';
 import 'cost_model.dart';
 import 'distance_params.dart';
 import 'guided_parse.dart';
+import 'static_dictionary.dart';
 import 'lz77.dart';
 import 'match_finder.dart';
 import 'metablock_writer.dart';
@@ -193,6 +194,12 @@ const int kMinQualityForOptimizedHistograms = 8;
 /// when it serialises smaller than the lazy chain parse, so quality 10 can
 /// never be worse than quality 9.
 const int kMinQualityForGuidedParsing = 10;
+
+/// Lowest quality that tries static-dictionary matches as an extra parse.
+const int kMinQualityForStaticDictionary = 5;
+
+/// Blocks shorter than this skip the dictionary rewrite (nothing to gain).
+const int kMinDictionaryBlockSize = 64;
 
 /// Lowest quality that runs a second, deeper guided pass (two-literal lazy
 /// look-ahead) on top of the quality 10 pass, so quality 11 is always at least
@@ -492,6 +499,7 @@ void _writeChainCompressedBlocks(
   final useContexts = quality >= kMinQualityForContextModeling;
   final useBlockSplitting = quality >= kMinQualityForBlockSplitting;
   final useGuidedParsing = quality >= kMinQualityForGuidedParsing;
+  final useStaticDictionary = quality >= kMinQualityForStaticDictionary;
   final useDistanceParams = quality >= kMinQualityForDistanceParams;
   final optimizeHistograms = quality >= kMinQualityForOptimizedHistograms;
   final extensiveSearch = quality >= kMinQualityForExtensiveSearch;
@@ -654,6 +662,27 @@ void _writeChainCompressedBlocks(
     }
 
     evaluateParse(0, commands);
+
+    // Static-dictionary candidate: dictionary words inside literal runs become
+    // references. It is just another candidate, so it can never grow a block.
+    if (useStaticDictionary && length >= kMinDictionaryBlockSize) {
+      final dictionaryCommands = CommandBuffer(blockSize ~/ 2 + 2);
+      final references = applyStaticDictionaryMatches(
+        input,
+        offset,
+        length,
+        commands,
+        dictionaryCommands,
+        maxBackwardLimit,
+      );
+      if (references > 0) {
+        parses.add((
+          commands: dictionaryCommands,
+          endCache: parses[0].endCache,
+        ));
+        evaluateParse(parses.length - 1, dictionaryCommands);
+      }
+    }
 
     // Guided passes. Skipped when the chain parse barely compresses: then the
     // block is either stored raw or almost raw and repassing cannot pay off.

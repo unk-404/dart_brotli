@@ -281,6 +281,34 @@ final class CommandBuffer {
     }
   }
 
+  /// Appends `insertLen` literals followed by a copy whose distance is given as
+  /// the parameter-independent distance code, without touching the cache.
+  ///
+  /// The decoder keeps its distance ring unchanged for dictionary references,
+  /// so a rewritten parse must not push them.
+  void addCopyWithCode(int insertLen, int copyLen, int distanceCode) {
+    assert(count < capacity, 'command buffer overflow');
+    assert(insertLen >= 0 && copyLen >= 2);
+    final insCode = getInsertLengthCode(insertLen);
+    final copyCode = getCopyLengthCode(copyLen);
+    final useLastDistance = distanceCode == 0;
+    final packed = prefixEncodeCopyDistance(
+      distanceCode,
+      0,
+      0,
+      _bitsScratch,
+      _extraScratch,
+    );
+    final index = count;
+    this.insertLen[index] = insertLen;
+    this.copyLen[index] = copyLen;
+    cmdPrefix[index] = combineLengthCodes(insCode, copyCode, useLastDistance);
+    distPrefix[index] = packed & 0x3FF | (_bitsScratch[0] << 10);
+    distExtra[index] = _extraScratch[0];
+    distCode[index] = distanceCode;
+    count = index + 1;
+  }
+
   /// Appends the trailing insert-only command of a block.
   ///
   /// Mirrors `InitInsertCommand`: `copyLen == 0`, copy length code fixed to 4
