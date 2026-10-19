@@ -29,7 +29,7 @@ benchmark/codec_smoke.dart             dart compile exe/js/wasm smoke
 
 Prerequisites: Dart 3.13+, Node.js >= 22 on `PATH` (the `benchmark_test` CLI
 runs `--compile js/wasm` through `dart test -p node`), Rust/cargo, and a
-`bench-svg` binary. The repository font is `fonts/quicksand.ttf`.
+`bench-svg` binary. The repository font is `assets/fonts/quicksand.ttf`.
 
 ```sh
 # 1. corpus for the Rust oracle
@@ -58,7 +58,7 @@ dart run benchmark/normalize_bench.dart \
 
 # 5. render the card
 bench-svg render --config benchmark/bench-svg.toml \
-  --font-file fonts/quicksand.ttf -o assets/benchmarks.svg
+  --font-file assets/fonts/quicksand.ttf -o assets/benchmarks.svg
 ```
 
 The PowerShell equivalent for the compile loop above:

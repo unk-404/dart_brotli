@@ -114,7 +114,7 @@ jobs:
         with:
           config: benchmark/bench-svg.toml
           out: assets/benchmarks.svg
-          font: quicksand
+          font_file: assets/fonts/quicksand.ttf
       - name: Verify the SVG
         run: |
           test -s assets/benchmarks.svg
