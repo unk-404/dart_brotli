@@ -1,0 +1,5 @@
+# The RFC test corpus and the bundled font must be checked out byte-for-byte.
+# Git's default autocrlf/eol conversion changes the corpus size on Linux and
+# breaks both the manifest hashes and the decoded-length assertions.
+test/testdata/** -text
+fonts/** -text

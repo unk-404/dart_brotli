@@ -53,8 +53,13 @@ dart test
 ```
 
 CI runs Ubuntu/Windows/macOS, Chrome browser tests, the JS/Wasm compiles and the
-full suite against the Rust oracle (`tool/oracle_rust`). The oracle-backed tests
-read its executable path from `BROTLI_ORACLE` and skip when it is unset.
+full suite against the Rust oracle (`tool/oracle_rust`). For the full local
+suite build it and point `BROTLI_ORACLE` at the executable:
+
+```sh
+cargo build --release --locked --manifest-path tool/oracle_rust/Cargo.toml
+BROTLI_ORACLE=tool/oracle_rust/target/release/brotli-oracle dart test
+```
 
 ### Conformance data
 

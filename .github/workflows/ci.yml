@@ -28,9 +28,20 @@ jobs:
       - uses: dart-lang/setup-dart@v1
         with:
           sdk: 3.13.5
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Build the Rust oracle
+        run: cargo build --release --locked --manifest-path tool/oracle_rust/Cargo.toml
       - run: dart pub get
       - run: dart analyze
-      - run: dart test
+      - name: Full suite with the authoritative oracle
+        shell: bash
+        run: |
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            export BROTLI_ORACLE="$GITHUB_WORKSPACE/tool/oracle_rust/target/release/brotli-oracle.exe"
+          else
+            export BROTLI_ORACLE="$GITHUB_WORKSPACE/tool/oracle_rust/target/release/brotli-oracle"
+          fi
+          dart test
 
   # TEST: browser + JS/Wasm compile.
   web:
@@ -52,30 +63,12 @@ jobs:
           dart compile js benchmark/codec_smoke.dart -o build/codec_smoke.js
           dart compile wasm benchmark/codec_smoke.dart -o build/codec_smoke.wasm
 
-  # TEST: full suite against the authoritative Rust oracle.
-  oracle:
-    name: test (Rust oracle)
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: dart-lang/setup-dart@v1
-        with:
-          sdk: 3.13.5
-      - uses: dtolnay/rust-toolchain@stable
-      - name: Build the Rust oracle
-        run: cargo build --release --locked --manifest-path tool/oracle_rust/Cargo.toml
-      - run: dart pub get
-      - name: Full suite with the authoritative oracle
-        env:
-          BROTLI_ORACLE: ${{ github.workspace }}/tool/oracle_rust/target/release/brotli-oracle
-        run: dart test
-
   # ---------------------------------------------------------------------------
   # BENCHMARK: only after every TEST job is green.
   # ---------------------------------------------------------------------------
   benchmark:
     name: benchmark
-    needs: [test, web, oracle]
+    needs: [test, web]
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
