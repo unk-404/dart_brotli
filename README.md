@@ -44,6 +44,24 @@ final compressed = brotliCompress(Uint8List.fromList([1, 2, 3, 4]));
 final raw = brotliDecompress(compressed);
 ```
 
+Streaming in both directions:
+
+```dart
+final encoder = BrotliEncoder();
+encoder.add(Bytes.fromList([1, 2, 3, 4]));
+encoder.flush();          // optional: emit the pending block, keep the stream open
+encoder.finish();
+final compressed = encoder.takeOutput();
+
+final decoder = BrotliDecoder();
+decoder.addInput(compressed);
+decoder.closeInput();
+final out = Uint8List(64 * 1024);
+while (decoder.decode(out) != BrotliStatus.done) {
+  // consume decoder.bytesWritten bytes of `out`
+}
+```
+
 ## Development
 
 ```sh
