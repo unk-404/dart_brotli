@@ -249,7 +249,13 @@ Uint8List brotliCompress(
   if (quality <= 1) {
     _writeGreedyCompressedBlocks(writer, input, quality, lgwin);
   } else {
-    _writeChainCompressedBlocks(writer, input, quality, lgwin);
+    _writeChainCompressedBlocks(
+      writer,
+      input,
+      quality,
+      lgwin,
+      sizeHint: options.sizeHint ?? input.length,
+    );
   }
 
   writer.writeBits(1, 1); // ISLAST
@@ -470,6 +476,7 @@ void _writeChainCompressedBlocks(
   int lgwin, {
   int start = 0,
   int? end,
+  int? sizeHint,
   _ChainState? continuation,
 }) {
   const blockSize = kChainBlockSize;
@@ -529,7 +536,13 @@ void _writeChainCompressedBlocks(
     // result is written, so a guided parse can never make a block larger and
     // must beat the chain parse to be kept.
     final contextModel = useContexts
-        ? chooseLiteralContextModel(input, offset, length, quality)
+        ? chooseLiteralContextModel(
+            input,
+            offset,
+            length,
+            quality,
+            sizeHint: sizeHint ?? input.length,
+          )
         : null;
 
     final mark = writer.mark();
@@ -786,6 +799,7 @@ final class BrotliEncoder {
   BrotliEncoder({BrotliEncodeOptions options = const BrotliEncodeOptions()})
     : _quality = _clamp(options.quality, 0, 11),
       _largeWindow = options.largeWindow,
+      _sizeHint = options.sizeHint,
       _lgwin = _normalizeLgwin(options) {
     if (!_largeWindow && options.lgwin > _kMaxLgwin) {
       throw BrotliException(
@@ -803,6 +817,7 @@ final class BrotliEncoder {
   final int _quality;
   final int _lgwin;
   final bool _largeWindow;
+  final int? _sizeHint;
   final BitWriter _writer = BitWriter(initialCapacity: 1 << 12);
   _GreedyState? _greedy;
   _ChainState? _chain;
@@ -936,6 +951,7 @@ final class BrotliEncoder {
         _lgwin,
         start: start,
         end: end,
+        sizeHint: _sizeHint ?? _inputLength,
         continuation: _chain,
       );
     }

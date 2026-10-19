@@ -159,6 +159,80 @@ final LiteralContextModel kContinuationContexts = LiteralContextModel(
   Uint8List.fromList(kStaticContextMapContinuation),
 );
 
+/// `BROTLI_MAX_STATIC_CONTEXTS`: the complex UTF-8 map uses 13 literal trees.
+const int kMaxStaticContexts = 13;
+
+/// `kStaticContextMapComplexUTF8`: 64 context ids -> 13 literal trees.
+///
+/// The map groups contexts by what a decoded byte usually means: letters,
+/// digits, spaces, punctuation after a space, and "special" bytes (11/12).
+const List<int> kStaticContextMapComplexUtf8 = <int>[
+  11, 11, 12, 12, // 0 special
+  0, 0, 0, 0, // 4 lf
+  1, 1, 9, 9, // 8 space
+  2, 2, 2, 2, // !, first after space/lf and after something else
+  1, 1, 1, 1, // "
+  8, 3, 3, 3, // %
+  1, 1, 1, 1, // ({[
+  2, 2, 2, 2, // }])
+  8, 4, 4, 4, // :;
+  8, 7, 4, 4, // .
+  8, 0, 0, 0, // >
+  3, 3, 3, 3, // [0..9]
+  5, 5, 10, 5, // [A-Z]
+  5, 5, 10, 5,
+  6, 6, 6, 6, // [a-z]
+  6, 6, 6, 6,
+];
+
+/// The complex 13-context UTF-8 model.
+final LiteralContextModel kComplexUtf8Contexts = LiteralContextModel(
+  kMaxStaticContexts,
+  Uint8List.fromList(kStaticContextMapComplexUtf8),
+);
+
+/// `ShouldUseComplexStaticContextMap`.
+///
+/// Only long inputs (`size_hint >= 1 MiB`) are candidates. The decision samples
+/// 64-byte strides every 4 KiB and compares the entropy of the literal top-5-bit
+/// histogram with and without the 13 complex contexts: it is taken when the
+/// contextual entropy is at most 3 bits and saves at least 0.2 bits per symbol,
+/// which the reference tuned on the silesia corpus.
+bool shouldUseComplexStaticContextMap(
+  Uint8List input,
+  int start,
+  int length, {
+  required int sizeHint,
+  required int quality,
+}) {
+  if (sizeHint < (1 << 20)) return false;
+  if (quality < kMinQualityForLiteralContexts || length < 64) return false;
+  final end = start + length;
+  final combined = Uint32List(32);
+  final contextHistogram = Uint32List(kMaxStaticContexts * 32);
+  var total = 0;
+  for (var pos = start; pos + 64 <= end; pos += 4096) {
+    for (var p = pos + 2; p < pos + 64; p++) {
+      final literal = input[p];
+      final context = kStaticContextMapComplexUtf8[literalContextId(input, p)];
+      total++;
+      combined[literal >> 3]++;
+      contextHistogram[context * 32 + (literal >> 3)]++;
+    }
+  }
+  if (total == 0) return false;
+  final entropy1 = estimateEntropy(combined, 32) / total;
+  var entropy2 = 0.0;
+  for (var i = 0; i < kMaxStaticContexts; i++) {
+    entropy2 += estimateEntropy(
+      Uint32List.sublistView(contextHistogram, i * 32, i * 32 + 32),
+      32,
+    );
+  }
+  entropy2 /= total;
+  return entropy2 <= 3.0 && entropy1 - entropy2 >= 0.2;
+}
+
 /// UTF-8 prefix class used by the bigram sampler: 0 for ASCII, 1 for a leading
 /// byte (`11xxxxxx`) and 2 for a continuation byte (`10xxxxxx`).
 const List<int> _kPrefixClass = <int>[0, 0, 1, 2];
@@ -231,8 +305,18 @@ LiteralContextModel? chooseLiteralContextModel(
   Uint8List input,
   int start,
   int length,
-  int quality,
-) {
+  int quality, {
+  int? sizeHint,
+}) {
+  if (shouldUseComplexStaticContextMap(
+    input,
+    start,
+    length,
+    sizeHint: sizeHint ?? length,
+    quality: quality,
+  )) {
+    return kComplexUtf8Contexts;
+  }
   switch (chooseLiteralContextCount(input, start, length, quality)) {
     case 1:
       return null;

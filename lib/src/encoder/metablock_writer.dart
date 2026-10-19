@@ -99,36 +99,34 @@ int _mnibblesForLength(int length) {
 final class MetaBlockWriter {
   MetaBlockWriter()
     : _huffman = HuffmanEncoder(),
-      _literalHistogram = Uint32List(kMaxLiteralTrees * numLiteralSymbols),
       _commandHistogram = Uint32List(numCommandSymbols),
-      _literalDepth = Uint8List(kMaxLiteralTrees * numLiteralSymbols),
-      _literalBits = Uint16List(kMaxLiteralTrees * numLiteralSymbols),
       _commandDepth = Uint8List(numCommandSymbols),
       _commandBits = Uint16List(numCommandSymbols),
-      _contextMapHistogram = Uint32List(_kContextMapAlphabetSize),
-      _contextMapDepth = Uint8List(_kContextMapAlphabetSize),
-      _contextMapBits = Uint16List(_kContextMapAlphabetSize),
       _rleSymbols = Uint32List(kNumLiteralContexts),
       _mtf = Uint8List(256),
       _maxRunLengthPrefix = Int32List(1);
 
   final HuffmanEncoder _huffman;
-  final Uint32List _literalHistogram;
+  // One histogram/tree per literal context; the complex 13-context model needs
+  // more than kMaxLiteralTrees, so these grow on demand.
+  Uint32List _literalHistogram = Uint32List(kMaxLiteralTrees * numLiteralSymbols);
   final Uint32List _commandHistogram;
   // Distance histograms/trees can be wider than 64 symbols for large-window
   // streams, so they grow on demand (DistanceParams.alphabetSize).
   Uint32List _distanceHistogram = Uint32List(numDistanceSymbols);
-  final Uint8List _literalDepth;
-  final Uint16List _literalBits;
+  Uint8List _literalDepth = Uint8List(kMaxLiteralTrees * numLiteralSymbols);
+  Uint16List _literalBits = Uint16List(kMaxLiteralTrees * numLiteralSymbols);
   final Uint8List _commandDepth;
   final Uint16List _commandBits;
   Uint8List _distanceDepth = Uint8List(numDistanceSymbols);
   Uint16List _distanceBits = Uint16List(numDistanceSymbols);
 
   // Context-map encoding scratch.
-  final Uint32List _contextMapHistogram;
-  final Uint8List _contextMapDepth;
-  final Uint16List _contextMapBits;
+  // The context map alphabet is numClusters + RLE prefixes; the complex 13
+  // context model exceeds _kContextMapAlphabetSize, so these grow on demand.
+  Uint32List _contextMapHistogram = Uint32List(_kContextMapAlphabetSize);
+  Uint8List _contextMapDepth = Uint8List(_kContextMapAlphabetSize);
+  Uint16List _contextMapBits = Uint16List(_kContextMapAlphabetSize);
   final Uint32List _rleSymbols;
   final Uint8List _mtf;
   final Int32List _maxRunLengthPrefix;
@@ -162,6 +160,13 @@ final class MetaBlockWriter {
     final model = (contexts != null && contexts.numClusters > 1)
         ? contexts
         : null;
+    final literalTrees = model == null ? 1 : model.numClusters;
+    if (_literalHistogram.length < literalTrees * numLiteralSymbols) {
+      final size = literalTrees * numLiteralSymbols;
+      _literalHistogram = Uint32List(size);
+      _literalDepth = Uint8List(size);
+      _literalBits = Uint16List(size);
+    }
 
     final mnibbles = _mnibblesForLength(length);
     writer.writeBits(1, isLast ? 1 : 0); // ISLAST
@@ -281,6 +286,11 @@ final class MetaBlockWriter {
     final maxPrefix = _maxRunLengthPrefix[0];
     final alphabetSize = numClusters + maxPrefix;
 
+    if (_contextMapHistogram.length < alphabetSize) {
+      _contextMapHistogram = Uint32List(alphabetSize);
+      _contextMapDepth = Uint8List(alphabetSize);
+      _contextMapBits = Uint16List(alphabetSize);
+    }
     final histogram = _contextMapHistogram;
     histogram.fillRange(0, histogram.length, 0);
     const symbolMask = (1 << _kContextMapSymbolBits) - 1;
