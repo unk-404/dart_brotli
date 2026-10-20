@@ -2,4 +2,5 @@
 # Git's default autocrlf/eol conversion changes the corpus size on Linux and
 # breaks both the manifest hashes and the decoded-length assertions.
 test/testdata/** -text
+test/decoder/compound_vectors/** -text
 assets/fonts/** -text

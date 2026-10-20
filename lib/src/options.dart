@@ -32,6 +32,7 @@ final class BrotliEncodeOptions {
     this.mode = BrotliMode.generic,
     this.sizeHint,
     this.largeWindow = false,
+    this.compoundDictionary,
   });
 
   final int quality;
@@ -42,6 +43,14 @@ final class BrotliEncodeOptions {
 
   /// Non-RFC large-window streams (lgwin 25..30). Off by default.
   final bool largeWindow;
+
+  /// Caller-provided LZ77 dictionary (the `brotli --dictionary` extension).
+  ///
+  /// The encoder may encode input spans that occur in this buffer as
+  /// dictionary references; the decoder must be given the same bytes through
+  /// [BrotliDecodeOptions.compoundDictionary] to decode the stream.
+  /// `null` (the default) disables compound-dictionary matching.
+  final Uint8List? compoundDictionary;
 }
 
 /// Decoder options.

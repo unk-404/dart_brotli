@@ -59,6 +59,7 @@ import 'context_modeling.dart';
 import 'cost_model.dart';
 import 'distance_params.dart';
 import 'guided_parse.dart';
+import 'compound_dictionary.dart';
 import 'static_dictionary.dart';
 import 'lz77.dart';
 import 'match_finder.dart';
@@ -262,6 +263,7 @@ Uint8List brotliCompress(
       quality,
       lgwin,
       sizeHint: options.sizeHint ?? input.length,
+      compoundDictionary: options.compoundDictionary,
     );
   }
 
@@ -484,6 +486,7 @@ void _writeChainCompressedBlocks(
   int start = 0,
   int? end,
   int? sizeHint,
+  Uint8List? compoundDictionary,
   _ChainState? continuation,
 }) {
   const blockSize = kChainBlockSize;
@@ -500,6 +503,11 @@ void _writeChainCompressedBlocks(
   final useBlockSplitting = quality >= kMinQualityForBlockSplitting;
   final useGuidedParsing = quality >= kMinQualityForGuidedParsing;
   final useStaticDictionary = quality >= kMinQualityForStaticDictionary;
+  final compoundSize = compoundDictionary?.length ?? 0;
+  final compoundMatcher =
+      (useStaticDictionary && compoundSize > 0)
+      ? CompoundDictionaryMatcher(compoundDictionary!)
+      : null;
   final useDistanceParams = quality >= kMinQualityForDistanceParams;
   final optimizeHistograms = quality >= kMinQualityForOptimizedHistograms;
   final extensiveSearch = quality >= kMinQualityForExtensiveSearch;
@@ -674,6 +682,7 @@ void _writeChainCompressedBlocks(
         commands,
         dictionaryCommands,
         maxBackwardLimit,
+        compoundSize: compoundSize,
       );
       if (references > 0) {
         parses.add((
@@ -681,6 +690,34 @@ void _writeChainCompressedBlocks(
           endCache: parses[0].endCache,
         ));
         evaluateParse(parses.length - 1, dictionaryCommands);
+      }
+    }
+    // Compound-dictionary candidate: input spans that occur in the attached
+    // dictionary become raw copies from it. Another candidate, so it can only
+    // be chosen when it serialises smaller.
+    if (compoundMatcher != null) {
+      final compoundCommands = CommandBuffer(blockSize ~/ 2 + 2);
+      // Compound copies roll the decoder ring, so the rewrite tracks it and the
+      // candidate carries its own end state.
+      final compoundCache = Int32List.fromList(<int>[
+        saved0,
+        saved1,
+        saved2,
+        saved3,
+      ]);
+      final references = applyCompoundDictionaryMatches(
+        input,
+        offset,
+        length,
+        commands,
+        compoundCommands,
+        maxBackwardLimit,
+        compoundMatcher,
+        compoundCache,
+      );
+      if (references > 0) {
+        parses.add((commands: compoundCommands, endCache: compoundCache));
+        evaluateParse(parses.length - 1, compoundCommands);
       }
     }
 
@@ -829,6 +866,7 @@ final class BrotliEncoder {
     : _quality = _clamp(options.quality, 0, 11),
       _largeWindow = options.largeWindow,
       _sizeHint = options.sizeHint,
+      _compoundDictionary = options.compoundDictionary,
       _lgwin = _normalizeLgwin(options) {
     if (!_largeWindow && options.lgwin > _kMaxLgwin) {
       throw BrotliException(
@@ -847,6 +885,7 @@ final class BrotliEncoder {
   final int _lgwin;
   final bool _largeWindow;
   final int? _sizeHint;
+  final Uint8List? _compoundDictionary;
   final BitWriter _writer = BitWriter(initialCapacity: 1 << 12);
   _GreedyState? _greedy;
   _ChainState? _chain;
@@ -981,6 +1020,7 @@ final class BrotliEncoder {
         start: start,
         end: end,
         sizeHint: _sizeHint ?? _inputLength,
+        compoundDictionary: _compoundDictionary,
         continuation: _chain,
       );
     }

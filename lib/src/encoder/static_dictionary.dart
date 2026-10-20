@@ -192,8 +192,9 @@ int applyStaticDictionaryMatches(
   int length,
   CommandBuffer commands,
   CommandBuffer out,
-  int maxBackwardLimit,
-) {
+  int maxBackwardLimit, {
+  int compoundSize = 0,
+}) {
   out.clear();
   final end = start + length;
   assert(end >= start);
@@ -214,7 +215,9 @@ int applyStaticDictionaryMatches(
       }
       final literals = pending + (cursor - pos);
       final maxBackward = cursor < maxBackwardLimit ? cursor : maxBackwardLimit;
-      final distanceCode = match.distance(maxBackward) + 15;
+      // With a compound dictionary attached the static dictionary addresses
+      // are shifted up by its size.
+      final distanceCode = match.distance(maxBackward) + compoundSize + 15;
       out.addCopyWithCode(literals, match.length, distanceCode);
       references++;
       pending = 0;
