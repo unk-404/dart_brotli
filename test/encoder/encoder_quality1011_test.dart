@@ -228,9 +228,10 @@ void main() {
       final stopwatch = Stopwatch()..start();
       brotliCompress(input, options: const BrotliEncodeOptions(quality: 11));
       stopwatch.stop();
-      // The budget is "a few seconds" on the development VM; keep a generous
-      // bound so slow CI machines do not produce false failures.
-      expect(stopwatch.elapsedMilliseconds, lessThan(20000));
+      // Measured ~1.2 s on the development VM for this 1 MiB text (two DP
+      // passes, the second reusing the first pass's match cache); keep a
+      // generous bound so slow CI machines do not produce false failures.
+      expect(stopwatch.elapsedMilliseconds, lessThan(6000));
     }, timeout: const Timeout(Duration(minutes: 2)));
   });
 

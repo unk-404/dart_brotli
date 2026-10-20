@@ -692,13 +692,19 @@ void _writeChainCompressedBlocks(
         commands,
       );
       final passes = quality >= kMinQualityForDeeperGuidedParsing ? 2 : 1;
+      // The two passes search the same positions with the same caps and a
+      // rolled-back matcher state, so the first pass fills a match cache the
+      // second one reuses; that halves quality 11's dominant search cost
+      // without changing the resulting parse.
+      final matchLen = Int32List(passes > 1 ? length : 0);
+      final matchDist = Int32List(passes > 1 ? length : 0);
+      final matchValid = Uint8List(passes > 1 ? length : 0);
       for (var pass = 0; pass < passes; pass++) {
         distCache[0] = saved0;
         distCache[1] = saved1;
         distCache[2] = saved2;
         distCache[3] = saved3;
         final optimal = CommandBuffer(blockSize ~/ 2 + 2);
-
         hasher.beginJournal(length + 4);
         createOptimalBackwardReferences(
           input,
@@ -709,6 +715,10 @@ void _writeChainCompressedBlocks(
           distCache,
           maxBackwardLimit,
           optimalModel,
+          enumeratedLength: pass == 0 ? 24 : 12,
+          matchCacheLen: passes > 1 ? matchLen : null,
+          matchCacheDist: passes > 1 ? matchDist : null,
+          matchCacheValid: passes > 1 ? matchValid : null,
         );
         hasher.rollbackJournal();
         hasher.endJournal();

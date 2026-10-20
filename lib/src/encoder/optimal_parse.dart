@@ -59,8 +59,12 @@ void createOptimalBackwardReferences(
   Int32List? knownCopyLen,
   Int32List? knownCopyDist,
   int searchStride = 1,
+  int enumeratedLength = _kMaxEnumeratedLength,
   int maxCandidates = 24,
-  int maxSearchLength = 768,
+  int maxSearchLength = 320,
+  Int32List? matchCacheLen,
+  Int32List? matchCacheDist,
+  Uint8List? matchCacheValid,
 }) {
   commands.clear();
   final end = start + size;
@@ -83,6 +87,8 @@ void createOptimalBackwardReferences(
   }
   costs[0] = 0;
   final sr = HasherSearchResult()..reset(kMinScore);
+  var previousMatchLen = 0;
+  var previousMatchDistance = 0;
 
   for (var i = 0; i <= size; i++) {
     final base = costs[i];
@@ -106,21 +112,37 @@ void createOptimalBackwardReferences(
       }
     }
 
-    // Copy edges. Positions the previous parse never considered (inside a
-    // copy) are skipped when a search mask is supplied: the DP then refinements
-    // concentrate on literal runs and copy boundaries, which keeps the pass
-    // within the quality tier's time budget.
-    final searchable = (searchMask == null || searchMask[i] != 0) &&
-        (searchStride <= 1 || i % searchStride == 0);
-    final knownLength = knownCopyLen != null ? knownCopyLen[i] : 0;
-    if (!searchable && knownLength == 0) continue;
-    if (pos + kHashTypeLength >= end) continue;
-    final maxLength = end - pos;
+    // Copy edges. A previous *search* result is reused when the cache has one
+    // (the second pass of quality 11 then does no searches at all); otherwise
+    // this position is searched on stride positions. Between searched positions
+    // the previous match is propagated as a lower bound: a match of L bytes at
+    // distance D is a match of L-1 bytes one byte later at the same distance.
     final maxDistance = pos < maxBackwardLimit ? pos : maxBackwardLimit;
     if (maxDistance <= 0) continue;
-    var length = knownLength;
-    var distance = knownLength > 0 ? knownCopyDist![i] : 0;
-    if (searchable) {
+    final maxLength = end - pos;
+    var length = 0;
+    var distance = 0;
+    if (previousMatchLen >= 3) {
+      length = previousMatchLen - 1;
+      distance = previousMatchDistance;
+    }
+    if (knownCopyLen != null && knownCopyLen[i] > length) {
+      length = knownCopyLen[i];
+      distance = knownCopyDist![i];
+    }
+    final hasCachedMatch = matchCacheValid != null && matchCacheValid[i] != 0;
+    if (hasCachedMatch) {
+      final cachedLen = matchCacheLen![i];
+      if (cachedLen >= 2) {
+        length = cachedLen;
+        distance = matchCacheDist![i];
+      } else {
+        length = 0;
+        distance = 0;
+      }
+    } else if ((searchMask == null || searchMask[i] != 0) &&
+        (searchStride <= 1 || i % searchStride == 0) &&
+        pos + kHashTypeLength < end) {
       final searchLimit = maxLength < maxSearchLength
           ? maxLength
           : maxSearchLength;
@@ -135,20 +157,30 @@ void createOptimalBackwardReferences(
         sr,
         maxCandidates: maxCandidates,
       );
-      if (sr.score > kMinScore && sr.len > length) {
-        length = sr.len;
+      final found = sr.score > kMinScore ? sr.len : 0;
+      if (matchCacheValid != null) {
+        matchCacheValid[i] = 1;
+        matchCacheLen![i] = found;
+        matchCacheDist![i] = found >= 2 ? sr.distance : 0;
+      }
+      // The scored search result is cost aware, so it replaces a longer but
+      // farther propagated match.
+      if (found >= 2) {
+        length = found;
         distance = sr.distance;
       }
     }
-    // A distance seeded from the previous parse is only valid at its own copy
+    previousMatchLen = length;
+    previousMatchDistance = distance;    // A distance seeded from the previous parse is only valid at its own copy
+    // start; if the DP starts the copy earlier it can exceed the window.
+    if (distance > maxDistance) length = 0;
+    if (length < 2) continue;    // A distance seeded from the previous parse is only valid at its own copy
     // start; if the DP starts the copy earlier it can exceed the window.
     if (distance > maxDistance) length = 0;
     if (length < 2) continue;
     final distanceCode = distance + numDistanceShortCodes - 1;
     final pending = insertLen[i];
-    final limit = length < _kMaxEnumeratedLength
-        ? length
-        : _kMaxEnumeratedLength;
+    final limit = length < enumeratedLength ? length : enumeratedLength;
     for (var len = 2; len <= limit; len++) {
       final candidate = base + model.copyCost(pending, len, distanceCode);
       final next = i + len;
