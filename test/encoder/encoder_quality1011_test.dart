@@ -180,6 +180,7 @@ void main() {
         'alice29.txt': _textAlice,
         'plrabn12.txt': _textPlrabn12,
         'text-1m': _data(_DataKind.text, _kMiB),
+        'text-2m': _data(_DataKind.text, 2 * _kMiB),
       };
       for (final entry in sources.entries) {
         int size(int quality) => brotliCompress(
@@ -189,8 +190,15 @@ void main() {
         final q9 = size(9);
         final q10 = size(10);
         final q11 = size(11);
-        expect(q10, lessThanOrEqualTo(q9), reason: 'q10 ${entry.key}');
-        expect(q11, lessThanOrEqualTo(q10), reason: 'q11 ${entry.key}');
+        // The bounded DP parse makes quality 10/11 strictly better on English
+        // text; on the two classic corpora a tie is acceptable.
+        if (entry.key.startsWith('text-')) {
+          expect(q10, lessThan(q9), reason: 'q10 must beat q9 (${entry.key})');
+          expect(q11, lessThan(q10), reason: 'q11 must beat q10 (${entry.key})');
+        } else {
+          expect(q10, lessThanOrEqualTo(q9), reason: 'q10 ${entry.key}');
+          expect(q11, lessThanOrEqualTo(q10), reason: 'q11 ${entry.key}');
+        }
         // Quality 9 is unchanged by the q10/q11 work.
         expect(q9, lessThanOrEqualTo(q9));
       }

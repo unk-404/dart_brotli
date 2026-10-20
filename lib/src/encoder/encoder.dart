@@ -59,6 +59,7 @@ import 'context_modeling.dart';
 import 'cost_model.dart';
 import 'distance_params.dart';
 import 'guided_parse.dart';
+import 'optimal_parse.dart';
 import 'compound_dictionary.dart';
 import 'static_dictionary.dart';
 import 'lz77.dart';
@@ -502,6 +503,7 @@ void _writeChainCompressedBlocks(
   final useContexts = quality >= kMinQualityForContextModeling;
   final useBlockSplitting = quality >= kMinQualityForBlockSplitting;
   final useGuidedParsing = quality >= kMinQualityForGuidedParsing;
+  final useOptimalParsing = quality >= kMinQualityForGuidedParsing;
   final useStaticDictionary = quality >= kMinQualityForStaticDictionary;
   final compoundSize = compoundDictionary?.length ?? 0;
   final compoundMatcher =
@@ -670,6 +672,53 @@ void _writeChainCompressedBlocks(
     }
 
     evaluateParse(0, commands);
+
+    // Bounded optimal (DP) candidate: a shortest-path parse priced by the
+    // previous parse's histograms. It can defer copies by several literals,
+    // which is what lets quality 10/11 beat the lazy parse on English text.
+    if (useOptimalParsing &&
+        length >= kMinGuidedParseBlockSize &&
+        bestBits * 5 < uncompressedBits * 4) {
+      var optimalModel = ParseCostModel.fromCommands(
+        input,
+        offset,
+        length,
+        commands,
+      );
+      final passes = quality >= kMinQualityForDeeperGuidedParsing ? 2 : 1;
+      for (var pass = 0; pass < passes; pass++) {
+        distCache[0] = saved0;
+        distCache[1] = saved1;
+        distCache[2] = saved2;
+        distCache[3] = saved3;
+        final optimal = CommandBuffer(blockSize ~/ 2 + 2);
+
+        hasher.beginJournal(length + 4);
+        createOptimalBackwardReferences(
+          input,
+          offset,
+          length,
+          hasher,
+          optimal,
+          distCache,
+          maxBackwardLimit,
+          optimalModel,
+        );
+        hasher.rollbackJournal();
+        hasher.endJournal();
+        parses.add((
+          commands: optimal,
+          endCache: _snapshotDistanceCache(distCache),
+        ));
+        evaluateParse(parses.length - 1, optimal);
+        optimalModel = ParseCostModel.fromCommands(
+          input,
+          offset,
+          length,
+          optimal,
+        );
+      }
+    }
 
     // Static-dictionary candidate: dictionary words inside literal runs become
     // references. It is just another candidate, so it can never grow a block.

@@ -332,8 +332,9 @@ final class HashChainMatcher {
     int curIx,
     int maxLength,
     int maxBackward,
-    HasherSearchResult out,
-  ) {
+    HasherSearchResult out, {
+    int maxCandidates = 1 << 30,
+  }) {
     var bestScore = out.score;
     var bestLen = out.len;
     final key = hashAt(data, curIx);
@@ -375,7 +376,10 @@ final class HashChainMatcher {
       final count = counts[key];
       final down = count > blockSize ? count - blockSize : 0;
       final bucketBase = key << blockBits;
+      var candidatesLeft = maxCandidates;
       for (var i = count; i > down;) {
+        if (candidatesLeft <= 0) break;
+        candidatesLeft--;
         i--;
         // A match that already spans the whole remaining block cannot be
         // improved, and the 4-byte window used to reject candidates would read
@@ -407,7 +411,8 @@ final class HashChainMatcher {
     }
 
     final slot = (key << blockBits) + (counts[key] & blockMask);
-    if (journalLength >= 0 && journalLength < _journalValues.length) {
+    if (journalLength >= 0) {
+      if (journalLength >= _journalValues.length) _growJournal();
       _journalSlots[journalLength] = slot;
       _journalValues[journalLength] = buckets[slot];
       _journalKeys[journalLength] = key;
@@ -443,6 +448,18 @@ final class HashChainMatcher {
       _journalCounts = Uint32List(capacity);
     }
     journalLength = 0;
+  }
+
+  void _growJournal() {
+    final capacity = _journalValues.length * 2 + 16;
+    final values = Uint32List(capacity)..setRange(0, journalLength, _journalValues);
+    final slots = Uint32List(capacity)..setRange(0, journalLength, _journalSlots);
+    final keys = Uint32List(capacity)..setRange(0, journalLength, _journalKeys);
+    final counts = Uint32List(capacity)..setRange(0, journalLength, _journalCounts);
+    _journalValues = values;
+    _journalSlots = slots;
+    _journalKeys = keys;
+    _journalCounts = counts;
   }
 
   /// Undoes every insertion recorded since [beginJournal].
