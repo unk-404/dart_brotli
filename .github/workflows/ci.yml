@@ -110,9 +110,9 @@ jobs:
             --rust build/benchmark_test/rust.jsonl \
             --out-dir build/benchmark_test/normalized
       - name: Render the comparison card
-        uses: unk-404/benchmark_svg@master
+        uses: unk-404/benchcat@master
         with:
-          config: benchmark/bench-svg.toml
+          config: benchmark/benchcat.toml
           out: assets/benchmarks.svg
           font_file: assets/fonts/quicksand.ttf
       - name: Verify the SVG

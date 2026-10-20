@@ -21,7 +21,7 @@ benchmark/corpus.dart                  deterministic 1 MiB corpus (web-safe)
 benchmark/gen_corpus.dart              writes the corpus for the Rust oracle
 benchmark/brotli_benchmark_test.dart   four benchmark_test rows
 benchmark/normalize_bench.dart         benchmark_test + Rust -> canonical B/s JSONL
-benchmark/bench-svg.toml               four rows x five implementations
+benchmark/benchcat.toml                four rows x five implementations
 benchmark/codec_smoke.dart             dart compile exe/js/wasm smoke
 ```
 
@@ -29,7 +29,7 @@ benchmark/codec_smoke.dart             dart compile exe/js/wasm smoke
 
 Prerequisites: Dart 3.13+, Node.js >= 22 on `PATH` (the `benchmark_test` CLI
 runs `--compile js/wasm` through `dart test -p node`), Rust/cargo, and a
-`bench-svg` binary. The repository font is `assets/fonts/quicksand.ttf`.
+`benchcat` binary. The repository font is `assets/fonts/quicksand.ttf`.
 
 ```sh
 # 1. corpus for the Rust oracle
@@ -57,7 +57,7 @@ dart run benchmark/normalize_bench.dart \
   --out-dir build/benchmark_test/normalized
 
 # 5. render the card
-bench-svg render --config benchmark/bench-svg.toml \
+benchcat render --config benchmark/benchcat.toml \
   --font-file assets/fonts/quicksand.ttf -o assets/benchmarks.svg
 ```
 

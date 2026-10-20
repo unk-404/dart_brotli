@@ -108,7 +108,7 @@ Four core operations (decode/encode on 1 MiB text and binary at quality 5) are
 measured with [`benchmark_test`](https://pub.dev/packages/benchmark_test) for
 Dart JIT/AOT/JS/WASM and for the authoritative Rust `brotli` crate. The five
 series are normalized to bytes/second and rendered with
-[`benchmark_svg`](https://github.com/unk-404/benchmark_svg) into the card above.
+[`benchcat`](https://github.com/unk-404/benchcat) into the card above.
 The single CI workflow runs the tests first, then the benchmark, then commits
 the changed SVG to `assets/` with `[skip ci]`.
 
