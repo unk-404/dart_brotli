@@ -8,9 +8,11 @@
   cost-guided parser for the highest qualities.
 - Push-style streaming encoder (`BrotliEncoder`) and decoder, including
   `flush`/`finish` semantics and incremental output.
-- Compound-dictionary decoding (`BrotliDecodeOptions.compoundDictionary`) for
-  Rust `--dictionary` streams; the encoder-side attachment is the remaining
-  extension.
+- Compound dictionary encode + decode (`BrotliEncodeOptions.compoundDictionary`
+  / `BrotliDecodeOptions.compoundDictionary`), interoperable with Rust
+  `--dictionary` streams in both directions.
+- The serialized shared/prepared dictionary format remains the only
+  unimplemented extension.
 - Blit-native API (`Bytes`/`BytesLike`/`BytesMut`) plus a `compat.dart`
   `Uint8List`/`List<int>` API, `dart:convert` codec and file helpers.
 - Web-safe: VM, dart2js and dart2wasm; no `dart:io` in the codec.
