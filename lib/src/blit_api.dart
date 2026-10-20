@@ -17,18 +17,27 @@ import 'options.dart';
 /// [compoundDictionary] attaches the non-RFC caller-provided LZ77 dictionary
 /// (`brotli --dictionary`) that was used to produce the stream; it overrides
 /// [BrotliDecodeOptions.compoundDictionary] when both are given.
+///
+/// [sharedDictionary] attaches a serialized shared dictionary
+/// (`draft-vandevenne-shared-brotli-format`); it overrides
+/// [BrotliDecodeOptions.sharedDictionary].
 Bytes brotliDecode(
   BytesLike input, {
   BrotliDecodeOptions options = const BrotliDecodeOptions(),
   BytesLike? compoundDictionary,
+  BytesLike? sharedDictionary,
 }) {
-  final decodeOptions = compoundDictionary == null
+  final decodeOptions = compoundDictionary == null && sharedDictionary == null
       ? options
       : BrotliDecodeOptions(
           maxOutputSize: options.maxOutputSize,
           eagerOutput: options.eagerOutput,
           allowLargeWindow: options.allowLargeWindow,
-          compoundDictionary: compoundDictionary.asUint8List(),
+          compoundDictionary:
+              compoundDictionary?.asUint8List() ?? options.compoundDictionary,
+          preparedDictionary: options.preparedDictionary,
+          sharedDictionary:
+              sharedDictionary?.asUint8List() ?? options.sharedDictionary,
         );
   return Bytes.fromUint8List(
     brotliDecompress(input.asUint8List(), options: decodeOptions),

@@ -8,7 +8,9 @@
 ///
 /// Attach a caller-provided LZ77 compound dictionary through
 /// [BrotliDecodeOptions.compoundDictionary] in [BrotliCodec.decodeOptions]; it
-/// is honoured by both one-shot and chunked decoding.
+/// is honoured by both one-shot and chunked decoding. Serialized shared
+/// dictionaries are attached the same way through
+/// [BrotliDecodeOptions.sharedDictionary].
 library;
 
 import 'dart:convert';

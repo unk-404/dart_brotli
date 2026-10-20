@@ -47,6 +47,7 @@ Uint8List brotliDecompress(
     maxOutputSize: options.maxOutputSize,
     eagerOutput: options.eagerOutput,
     compoundDictionary: options.compoundDictionary,
+    sharedDictionary: options.sharedDictionary,
   );
 }
 
@@ -174,6 +175,7 @@ final class BrotliDecoder {
       eagerOutput: options.eagerOutput,
       maxOutputSize: options.maxOutputSize,
       compoundDictionary: options.compoundDictionary,
+      sharedDictionary: options.sharedDictionary,
     );
   }
 

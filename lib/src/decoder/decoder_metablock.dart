@@ -25,7 +25,9 @@
 /// compound ("shared"/prepended) dictionary are resolved in
 /// [_applyDictionaryReference]: a distance larger than `maxDistance` is either a
 /// compound-dictionary copy (when a dictionary is attached and the distance
-/// addresses it) or a static-dictionary word with its 121 transforms.
+/// addresses it) or a static-dictionary word. When a serialized shared
+/// dictionary with custom word/transform lists is attached, the word comes from
+/// [_applyCustomDictionaryReference] instead of the built-in table.
 library;
 
 import 'dart:typed_data';
@@ -41,6 +43,7 @@ import '../options.dart';
 import 'bit_reader.dart';
 import 'decoder_state.dart';
 import 'huffman_decoder.dart';
+import 'shared_dictionary.dart';
 
 // ---------------------------------------------------------------------------
 // Entry points used by the D2 state machine.
@@ -780,7 +783,107 @@ void _applyDictionaryReference(BitReader reader, DecoderState state) {
     _applyCompoundDictionaryReference(reader, state, address);
     return;
   }
+  final shared = state.sharedDictionary;
+  if (shared != null && shared.isCustom) {
+    _applyCustomDictionaryReference(reader, state, shared, compoundSize);
+    return;
+  }
   _applyStaticDictionaryReference(reader, state, compoundSize);
+}
+
+/// Literal context (LSB6 mode) used by context-based custom dictionaries.
+int _dictionaryContext(DecoderState state) {
+  final ring = state.ringBuffer;
+  final mask = state.ringBufferMask;
+  final p1 = ring[(state.pos - 1) & mask] & 0xFF;
+  final p2 = ring[(state.pos - 2) & mask] & 0xFF;
+  return (kContextLookupTable[p1] | kContextLookupTable[p2 + 256]) & 0xFF;
+}
+
+/// Resolves one static-dictionary reference through a serialized shared
+/// dictionary's custom word/transform lists.
+///
+/// Port of the `s.dictionary.is_custom()` branch of the Rust/C decoder:
+/// * the dictionary id is `0` unless the container enables the 64-entry literal
+///   context map;
+/// * `address = distance - maxDistance - 1 - compoundSize` indexes the flat
+///   per-dictionary address space (multi-dictionary rescan included, see
+///   [SharedDictionary.lookup]);
+/// * the word is copied through the selected transform, which may write up to
+///   542 bytes past the ring cursor.
+void _applyCustomDictionaryReference(
+  BitReader reader,
+  DecoderState state,
+  SharedDictionary shared,
+  int compoundSize,
+) {
+  final wordLength = state.copyLength;
+  if (wordLength < sharedMinDictionaryWordLength ||
+      wordLength > sharedMaxDictionaryWordLength) {
+    throw BrotliException(
+      BrotliErrorCode.invalidDictionaryWord,
+      'custom dictionary word length $wordLength is outside '
+      '[$sharedMinDictionaryWordLength, $sharedMaxDictionaryWordLength]',
+      inputOffset: reader.bytesConsumed,
+    );
+  }
+  final dictId = shared.contextBased
+      ? shared.contextMap[_dictionaryContext(state)]
+      : 0;
+  final address = staticDictionaryAddress(
+    state.distance,
+    state.maxDistance,
+    compoundSize,
+  );
+  final lookup = shared.lookup(dictId, wordLength, address);
+  final fence = state.calculateFence();
+  final word = lookup.words.wordBytes(wordLength, lookup.wordIndex);
+  final int transformedLength;
+  if (lookup.transformIndex == lookup.transforms.cutoffIdentity) {
+    // Fast path: ["", IDENTITY, ""] copies the word verbatim.
+    state.ringBuffer.setRange(state.pos, state.pos + wordLength, word);
+    transformedLength = wordLength;
+  } else {
+    transformedLength = lookup.transforms.apply(
+      state.ringBuffer,
+      state.pos,
+      word,
+      wordLength,
+      lookup.transformIndex,
+    );
+  }
+  if (transformedLength == 0 && state.distance <= 120) {
+    // Matches the reference: a zero-length transformed word is only tolerated
+    // for large distances (where no meaningful LZ77 match was attempted).
+    throw BrotliException(
+      BrotliErrorCode.invalidTransform,
+      'custom dictionary transform ${lookup.transformIndex} produced an '
+      'empty word',
+      inputOffset: reader.bytesConsumed,
+    );
+  }
+  if (transformedLength > state.metaBlockLength) {
+    throw BrotliException(
+      BrotliErrorCode.invalidDistance,
+      'custom dictionary word of $transformedLength bytes overruns the '
+      'metablock (${state.metaBlockLength} bytes left)',
+      inputOffset: reader.bytesConsumed,
+    );
+  }
+  assert(
+    transformedLength <= maxTransformedWordLength,
+    'custom transformed word of $transformedLength bytes exceeds the ring '
+    'slack',
+  );
+  state.pos += transformedLength;
+  state.metaBlockLength -= transformedLength;
+  state.dictionaryReferenceCount++;
+  if (state.pos >= fence) {
+    state.nextPhase = DecodePhase.mainLoop;
+    state.phase = DecodePhase.initWrite;
+  } else {
+    state.phase = DecodePhase.mainLoop;
+  }
 }
 
 /// Starts one compound-dictionary copy (port of Java's

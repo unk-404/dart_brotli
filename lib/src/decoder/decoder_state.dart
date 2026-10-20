@@ -17,6 +17,7 @@ library;
 import 'dart:typed_data';
 
 import '../common/format_tables.dart';
+import 'shared_dictionary.dart';
 
 /// Decoder phases; port of the `RunningState` enum in `Decode.java`.
 ///
@@ -73,11 +74,13 @@ enum DecodePhase {
   copyFromCompoundDictionary,
 }
 
-/// Ring-buffer slack: the longest transformed dictionary word (`5 + 24 + 8`).
+/// Ring-buffer slack: the longest transformed dictionary word.
 ///
-/// The ring buffer is allocated with this many extra bytes so that a
-/// dictionary word plus its transform affixes never needs a wrap.
-const int maxTransformedWordLength = 37;
+/// The built-in RFC transforms need `5 + 24 + 8 = 37`, but a serialized shared
+/// dictionary may define transforms with full-length affixes: 255-byte prefix
+/// + 31-byte word (rounded up to 32) + 255-byte suffix = 542, matching
+/// `kRingBufferWriteAheadSlack` in the reference C/Rust decoders.
+const int maxTransformedWordLength = 542;
 
 /// Hard cap applied to [DecoderState.expectedTotalSize] (Java: `1 << 30`).
 const int maxExpectedTotalSize = 1 << 30;
@@ -96,6 +99,7 @@ final class DecoderState {
     this.eagerOutput = true,
     this.maxOutputSize,
     Uint8List? compoundDictionary,
+    this.sharedDictionary,
   }) : compoundDictionary = compoundDictionary ?? Uint8List(0) {
     // Most-recent-first distance ring, exactly as Java's State constructor.
     rings[0] = 16;
@@ -135,6 +139,12 @@ final class DecoderState {
 
   /// Number of bytes in [compoundDictionary].
   int get compoundDictionarySize => compoundDictionary.length;
+
+  /// Custom word/transform lists from an attached serialized shared
+  /// dictionary; `null` when none is attached (the built-in static dictionary
+  /// is used). The embedded LZ77 prefix, if any, has already been merged into
+  /// [compoundDictionary].
+  final SharedDictionary? sharedDictionary;
 
   // ---------------------------------------------------------------------------
   // State machine.

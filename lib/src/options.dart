@@ -68,6 +68,7 @@ final class BrotliDecodeOptions {
     this.allowLargeWindow = false,
     this.compoundDictionary,
     this.preparedDictionary,
+    this.sharedDictionary,
   });
 
   /// Decompression-bomb guard; `null` means unlimited.
@@ -102,5 +103,27 @@ final class BrotliDecodeOptions {
 
   /// A pre-indexed compound dictionary (takes precedence over
   /// [compoundDictionary]).
+  ///
+  /// Only meaningful to the encoder; the decoder ignores it (give the raw bytes
+  /// through [compoundDictionary]). Kept here so one options object can be
+  /// shared by both directions.
   final BrotliPreparedDictionary? preparedDictionary;
+
+  /// Optional serialized shared dictionary
+  /// (`draft-vandevenne-shared-brotli-format`, magic `0x91 0x00`).
+  ///
+  /// This is the non-RFC extension consumed by `brotli --dictionary` shared
+  /// dictionaries. The container may carry:
+  ///
+  /// * an LZ77 prefix chunk, which is appended to the compound-dictionary
+  ///   address space (after [compoundDictionary]); and/or
+  /// * custom word lists and transform lists, which replace the built-in
+  ///   RFC 7932 static dictionary, optionally selected per literal context
+  ///   through a 64-entry context map.
+  ///
+  /// Malformed bytes raise [BrotliException] when the decoder is created.
+  /// The bytes are read-only and not copied; word/transform views point into
+  /// this buffer for the whole decode, so do not modify it. `null` (the
+  /// default) disables serialized shared dictionaries.
+  final Uint8List? sharedDictionary;
 }

@@ -44,6 +44,7 @@ import '../options.dart';
 import 'bit_reader.dart';
 import 'decoder_metablock.dart';
 import 'decoder_state.dart';
+import 'shared_dictionary.dart';
 
 /// Maximum number of ring flushes [decompressAll] may perform before it
 /// concludes that the decoder is not making progress.
@@ -61,18 +62,38 @@ const int _maxEmptyFlushes = 1 << 20;
 ///   bytes. (With a closed reader this never happens.)
 /// * [BrotliStatus.done]: the stream ended; further calls return `done`.
 final class BrotliDecoderCore {
-  BrotliDecoderCore(
-    this.reader, {
+  /// Creates a decoder, parsing [sharedDictionary] eagerly.
+  ///
+  /// Malformed serialized shared dictionaries throw [BrotliException] here,
+  /// before any stream data is consumed. An embedded LZ77 prefix is merged
+  /// into the compound dictionary address space after [compoundDictionary].
+  factory BrotliDecoderCore(
+    BitReader reader, {
     bool allowLargeWindow = false,
     bool eagerOutput = true,
     int? maxOutputSize,
     Uint8List? compoundDictionary,
-  }) : state = DecoderState(
-         allowLargeWindow: allowLargeWindow,
-         eagerOutput: eagerOutput,
-         maxOutputSize: maxOutputSize,
-         compoundDictionary: compoundDictionary,
-       ) {
+    Uint8List? sharedDictionary,
+  }) {
+    final shared = sharedDictionary == null
+        ? null
+        : SharedDictionary.parse(sharedDictionary);
+    return BrotliDecoderCore._(
+      reader,
+      DecoderState(
+        allowLargeWindow: allowLargeWindow,
+        eagerOutput: eagerOutput,
+        maxOutputSize: maxOutputSize,
+        compoundDictionary: combineCompoundDictionary(
+          compoundDictionary,
+          shared,
+        ),
+        sharedDictionary: shared,
+      ),
+    );
+  }
+
+  BrotliDecoderCore._(this.reader, this.state) {
     state.phase = DecodePhase.initialized;
   }
 
@@ -573,6 +594,7 @@ final class BrotliDecoderCore {
     bool eagerOutput = true,
     int outputChunkSize = 64 * 1024,
     Uint8List? compoundDictionary,
+    Uint8List? sharedDictionary,
   }) {
     RangeError.checkValueInInterval(outputChunkSize, 1, 1 << 30);
     final core = BrotliDecoderCore(
@@ -581,6 +603,7 @@ final class BrotliDecoderCore {
       eagerOutput: eagerOutput,
       maxOutputSize: maxOutputSize,
       compoundDictionary: compoundDictionary,
+      sharedDictionary: sharedDictionary,
     );
     final builder = BytesBuilder(copy: false);
     final buffer = Uint8List(outputChunkSize);
