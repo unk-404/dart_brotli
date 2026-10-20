@@ -1,3 +1,14 @@
+## 0.1.2
+
+- Serialized shared dictionaries are decoded
+  (`BrotliDecodeOptions.sharedDictionary`): magic/prefix chunks, custom word
+  lists, custom transform lists (prefix/type/suffix, SHIFT parameters,
+  identity cutoff), 64-context dictionary maps, multi-dictionary fallback and
+  the embedded LZ77 prefix. Invalid dictionaries raise `BrotliException`.
+- Q11 performance: 1 MiB text 2.24 s -> ~1.2 s and q10 1.13 s -> ~0.98 s, at
+  <=0.13% size cost, by caching/propagating matches between the two optimal
+  parse passes and narrowing the search.
+
 ## 0.1.1
 
 - Q10/Q11 now run a bounded shortest-path (Zopfli-style) optimal parse:
