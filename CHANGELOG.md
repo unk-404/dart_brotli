@@ -20,5 +20,5 @@
   round-trip tests; Rust `brotli` oracle comparisons.
 - Four-row benchmark (decode/encode, 1 MiB text/binary, q5) against JIT/AOT/JS/
   WASM and the Rust oracle; one CI workflow from tests to benchmark charts.
-- Remaining extensions: large-window encoding, compound/shared dictionaries,
-  encoder-side static-dictionary matching.
+- Not included in 0.1.0: the serialized shared/prepared dictionary format
+  (planned for 0.1.1).
