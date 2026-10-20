@@ -3,6 +3,8 @@ library;
 
 import 'dart:typed_data';
 
+import 'encoder/prepared_dictionary.dart';
+
 /// Brotli encoder mode.
 enum BrotliMode { generic, text, font }
 
@@ -33,6 +35,7 @@ final class BrotliEncodeOptions {
     this.sizeHint,
     this.largeWindow = false,
     this.compoundDictionary,
+    this.preparedDictionary,
   });
 
   final int quality;
@@ -51,6 +54,10 @@ final class BrotliEncodeOptions {
   /// [BrotliDecodeOptions.compoundDictionary] to decode the stream.
   /// `null` (the default) disables compound-dictionary matching.
   final Uint8List? compoundDictionary;
+
+  /// A pre-indexed compound dictionary (takes precedence over
+  /// [compoundDictionary]).
+  final BrotliPreparedDictionary? preparedDictionary;
 }
 
 /// Decoder options.
@@ -60,6 +67,7 @@ final class BrotliDecodeOptions {
     this.eagerOutput = true,
     this.allowLargeWindow = false,
     this.compoundDictionary,
+    this.preparedDictionary,
   });
 
   /// Decompression-bomb guard; `null` means unlimited.
@@ -91,4 +99,8 @@ final class BrotliDecodeOptions {
   /// The bytes are read-only and not copied; do not mutate the buffer while a
   /// decode is in progress. `null` (the default) disables compound references.
   final Uint8List? compoundDictionary;
+
+  /// A pre-indexed compound dictionary (takes precedence over
+  /// [compoundDictionary]).
+  final BrotliPreparedDictionary? preparedDictionary;
 }

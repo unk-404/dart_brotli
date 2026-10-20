@@ -264,7 +264,10 @@ Uint8List brotliCompress(
       quality,
       lgwin,
       sizeHint: options.sizeHint ?? input.length,
-      compoundDictionary: options.compoundDictionary,
+      compoundDictionary:
+          options.preparedDictionary?.dictionary ??
+          options.compoundDictionary,
+      preparedMatcher: options.preparedDictionary?.createMatcher(),
     );
   }
 
@@ -488,6 +491,7 @@ void _writeChainCompressedBlocks(
   int? end,
   int? sizeHint,
   Uint8List? compoundDictionary,
+  CompoundDictionaryMatcher? preparedMatcher,
   _ChainState? continuation,
 }) {
   const blockSize = kChainBlockSize;
@@ -506,10 +510,12 @@ void _writeChainCompressedBlocks(
   final useOptimalParsing = quality >= kMinQualityForGuidedParsing;
   final useStaticDictionary = quality >= kMinQualityForStaticDictionary;
   final compoundSize = compoundDictionary?.length ?? 0;
-  final compoundMatcher =
-      (useStaticDictionary && compoundSize > 0)
-      ? CompoundDictionaryMatcher(compoundDictionary!)
-      : null;
+  final compoundMatcher = !useStaticDictionary
+      ? null
+      : preparedMatcher ??
+            (compoundSize > 0
+                ? CompoundDictionaryMatcher(compoundDictionary!)
+                : null);
   final useDistanceParams = quality >= kMinQualityForDistanceParams;
   final optimizeHistograms = quality >= kMinQualityForOptimizedHistograms;
   final extensiveSearch = quality >= kMinQualityForExtensiveSearch;
@@ -915,7 +921,10 @@ final class BrotliEncoder {
     : _quality = _clamp(options.quality, 0, 11),
       _largeWindow = options.largeWindow,
       _sizeHint = options.sizeHint,
-      _compoundDictionary = options.compoundDictionary,
+      _compoundDictionary =
+          options.preparedDictionary?.dictionary ??
+          options.compoundDictionary,
+      _preparedMatcher = options.preparedDictionary?.createMatcher(),
       _lgwin = _normalizeLgwin(options) {
     if (!_largeWindow && options.lgwin > _kMaxLgwin) {
       throw BrotliException(
@@ -935,6 +944,7 @@ final class BrotliEncoder {
   final bool _largeWindow;
   final int? _sizeHint;
   final Uint8List? _compoundDictionary;
+  final CompoundDictionaryMatcher? _preparedMatcher;
   final BitWriter _writer = BitWriter(initialCapacity: 1 << 12);
   _GreedyState? _greedy;
   _ChainState? _chain;
@@ -1070,6 +1080,7 @@ final class BrotliEncoder {
         end: end,
         sizeHint: _sizeHint ?? _inputLength,
         compoundDictionary: _compoundDictionary,
+        preparedMatcher: _preparedMatcher,
         continuation: _chain,
       );
     }

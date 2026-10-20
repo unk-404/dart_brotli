@@ -41,9 +41,11 @@ final class CompoundMatch {
 
 /// Four-byte prefix index over the compound dictionary bytes.
 final class CompoundDictionaryMatcher {
-  CompoundDictionaryMatcher(this.dictionary)
-    : _index = _buildIndex(dictionary),
-      _size = dictionary.length;
+  CompoundDictionaryMatcher(
+    this.dictionary, {
+    Map<int, List<int>>? index,
+  }) : _index = index ?? buildIndex(dictionary),
+       _size = dictionary.length;
 
   final Uint8List dictionary;
   final Map<int, List<int>> _index;
@@ -55,7 +57,10 @@ final class CompoundDictionaryMatcher {
       (data[offset + 2] << 16) |
       (data[offset + 3] << 24);
 
-  static Map<int, List<int>> _buildIndex(Uint8List dictionary) {
+  /// Builds the four-byte-prefix index for [dictionary].
+  ///
+  /// Public so BrotliPreparedDictionary can build it once and share it.
+  static Map<int, List<int>> buildIndex(Uint8List dictionary) {
     final index = <int, List<int>>{};
     final last = dictionary.length - 4;
     for (var pos = 0; pos <= last; pos++) {
