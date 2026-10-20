@@ -11,16 +11,17 @@ Pure Dart Brotli (RFC 7932) encoder and decoder.
 - **Implemented**: RFC 7932 decoder (static dictionary, 121 transforms,
   large-window decode), encoder quality 0–11 with block splitting, 13-context
   modeling, static-dictionary matching, RLE histograms, guided parsing and
-  large-window encoding; compound dictionary encode + decode; streaming encoder
-  and decoder; blit-native, compat and file APIs.
-- **Remaining**: the serialized shared/prepared dictionary format (the simpler
-  compound `--dictionary` extension is already supported in both directions).
+  large-window encoding; compound dictionary encode + decode, including a
+  reusable `BrotliPreparedDictionary`; streaming encoder and decoder;
+  blit-native, compat and file APIs.
+- **Remaining**: the serialized shared dictionary format only (the compound
+  `--dictionary` extension is supported in both directions).
 - **Two API layers**:
   - `brotli_neo.dart`: blit-native (`BytesLike` in, `Bytes` out);
   - `compat.dart`: `Uint8List`/`List<int>`, `dart:convert` codec and
     `package:brotli`-style functions.
 
-> Status: 0.1.0. The decoder is byte-exact on all 22 RFC corpus pairs; the
+> Status: 0.1.1. The decoder is byte-exact on all 22 RFC corpus pairs; the
 > encoder covers quality 0–11 and the public streaming/compat/file APIs are
 > usable. CI runs the VM, browser, Wasm and Rust-oracle suites.
 

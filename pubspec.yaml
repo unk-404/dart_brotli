@@ -1,6 +1,6 @@
 name: brotli_neo
 description: Pure Dart Brotli (RFC 7932) encoder and decoder with zero-copy bytes and web support.
-version: 0.1.0
+version: 0.1.1
 repository: https://github.com/unk-404/dart_brotli
 
 environment:
