@@ -13,12 +13,25 @@ import 'encoder/encoder.dart';
 import 'options.dart';
 
 /// Decodes one complete Brotli stream, returning a zero-copy [Bytes] view.
+///
+/// [compoundDictionary] attaches the non-RFC caller-provided LZ77 dictionary
+/// (`brotli --dictionary`) that was used to produce the stream; it overrides
+/// [BrotliDecodeOptions.compoundDictionary] when both are given.
 Bytes brotliDecode(
   BytesLike input, {
   BrotliDecodeOptions options = const BrotliDecodeOptions(),
+  BytesLike? compoundDictionary,
 }) {
+  final decodeOptions = compoundDictionary == null
+      ? options
+      : BrotliDecodeOptions(
+          maxOutputSize: options.maxOutputSize,
+          eagerOutput: options.eagerOutput,
+          allowLargeWindow: options.allowLargeWindow,
+          compoundDictionary: compoundDictionary.asUint8List(),
+        );
   return Bytes.fromUint8List(
-    brotliDecompress(input.asUint8List(), options: options),
+    brotliDecompress(input.asUint8List(), options: decodeOptions),
   );
 }
 

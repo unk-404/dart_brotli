@@ -23,9 +23,10 @@
 /// * ring-buffer growth (`maybeReallocateRingBuffer`), flushing (with optional
 ///   eager mode), wrapping and the `maxOutputSize` guard;
 /// * compressed metablocks: Huffman block trees, context maps, distance LUT,
-///   command/literal/copy loops and block switching (D3). A distance that
-///   reaches the static/compound dictionary range throws a tagged
-///   [BrotliErrorCode.unsupportedFeature] until D4 implements it;
+///   command/literal/copy loops and block switching. Distances past
+///   `maxDistance` resolve to the RFC static dictionary or, when
+///   [BrotliDecodeOptions.compoundDictionary] is attached, to the caller's
+///   compound dictionary (the non-RFC `brotli --dictionary` extension);
 /// * truncated / trailing / padding / header errors surface as
 ///   [BrotliException], never as `RangeError`/`StateError`.
 ///
@@ -65,10 +66,12 @@ final class BrotliDecoderCore {
     bool allowLargeWindow = false,
     bool eagerOutput = true,
     int? maxOutputSize,
+    Uint8List? compoundDictionary,
   }) : state = DecoderState(
          allowLargeWindow: allowLargeWindow,
          eagerOutput: eagerOutput,
          maxOutputSize: maxOutputSize,
+         compoundDictionary: compoundDictionary,
        ) {
     state.phase = DecodePhase.initialized;
   }
@@ -191,14 +194,20 @@ final class BrotliDecoderCore {
           }
           continue;
 
-        case DecodePhase.useDictionary:
         case DecodePhase.copyFromCompoundDictionary:
-          // Static dictionary / compound dictionary copies belong to D4. The
-          // distance resolver in D3 already reports them as unsupportedFeature
-          // before the state machine can reach these phases.
+          final status = decodeCompoundDictionaryCopy(state);
+          if (status != null) {
+            return status;
+          }
+          continue;
+
+        case DecodePhase.useDictionary:
+          // The distance resolver switches straight to
+          // [DecodePhase.copyFromCompoundDictionary] or back to the main loop;
+          // reaching this state means the state machine is inconsistent.
           throw BrotliException(
-            BrotliErrorCode.unsupportedFeature,
-            'dictionary copies are not implemented yet (D4)',
+            BrotliErrorCode.internalError,
+            'unexpected useDictionary phase',
             inputOffset: reader.bytesConsumed,
           );
 
@@ -563,6 +572,7 @@ final class BrotliDecoderCore {
     int? maxOutputSize,
     bool eagerOutput = true,
     int outputChunkSize = 64 * 1024,
+    Uint8List? compoundDictionary,
   }) {
     RangeError.checkValueInInterval(outputChunkSize, 1, 1 << 30);
     final core = BrotliDecoderCore(
@@ -570,6 +580,7 @@ final class BrotliDecoderCore {
       allowLargeWindow: allowLargeWindow,
       eagerOutput: eagerOutput,
       maxOutputSize: maxOutputSize,
+      compoundDictionary: compoundDictionary,
     );
     final builder = BytesBuilder(copy: false);
     final buffer = Uint8List(outputChunkSize);

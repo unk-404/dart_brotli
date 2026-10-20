@@ -21,10 +21,11 @@
 /// * Every loop flushes through [DecodePhase.initWrite] / [DecodePhase.write]
 ///   when `pos >= fence`, exactly like the reference.
 ///
-/// The static dictionary is D4: a distance larger than `maxDistance` is
-/// resolved through the RFC 7932 dictionary and its 121 transforms below
-/// ([_applyDictionaryReference]). Compound (caller-attached) dictionaries are
-/// not supported.
+/// The static dictionary (RFC 7932 §8) and the optional caller-attached
+/// compound ("shared"/prepended) dictionary are resolved in
+/// [_applyDictionaryReference]: a distance larger than `maxDistance` is either a
+/// compound-dictionary copy (when a dictionary is attached and the distance
+/// addresses it) or a static-dictionary word with its 121 transforms.
 library;
 
 import 'dart:typed_data';
@@ -709,8 +710,9 @@ BrotliStatus? decodeDistance(BitReader reader, DecoderState state) {
   }
 
   if (state.distance > state.maxDistance) {
-    // Static dictionary reference. The distance ring is intentionally not
-    // rolled for dictionary copies (Java model; RFC sec. 8).
+    // Static- or compound-dictionary reference. The distance ring is rolled
+    // only for compound copies (inside the helper), never for static words
+    // (Java model; RFC sec. 8).
     _applyDictionaryReference(reader, state);
     return null;
   }
@@ -732,11 +734,133 @@ BrotliStatus? decodeDistance(BitReader reader, DecoderState state) {
   return null;
 }
 
+/// Whether [distance] addresses the attached compound dictionary.
+///
+/// Distances in `(maxDistance, maxDistance + compoundSize]` are compound
+/// references; larger distances address the RFC static dictionary.
+bool isCompoundDictionaryDistance(
+  int distance,
+  int maxDistance,
+  int compoundSize,
+) {
+  return distance > maxDistance && distance - maxDistance <= compoundSize;
+}
+
+/// Static-dictionary word address for a dictionary-range [distance].
+///
+/// The compound dictionary occupies the first `compoundSize` addresses, so the
+/// RFC 7932 word address is shifted down by that size. The result is
+/// non-negative exactly when [isCompoundDictionaryDistance] is `false`.
+int staticDictionaryAddress(int distance, int maxDistance, int compoundSize) {
+  return distance - maxDistance - 1 - compoundSize;
+}
+
+/// Resolves a distance past `maxDistance`: compound dictionary or static word.
+///
+/// Compound addressing (non-RFC extension, compatible with Rust
+/// `brotli-decompressor` and `brotli --dictionary`):
+/// * distances in `(maxDistance, maxDistance + dictionary.length]` address the
+///   attached dictionary, furthest byte first:
+///   `address = dictionary.length - (distance - maxDistance)`;
+/// * `copyLength` raw bytes are copied from `address`; the copy may span ring
+///   flushes and is resumed in [decodeCompoundDictionaryCopy].
+///
+/// Static addressing (RFC 7932 §8), for larger distances:
+/// * `wordAddress = staticDictionaryAddress(distance, maxDistance, size)`;
+/// * the word is selected and transformed by
+///   [_applyStaticDictionaryReference].
+void _applyDictionaryReference(BitReader reader, DecoderState state) {
+  final compoundSize = state.compoundDictionarySize;
+  if (isCompoundDictionaryDistance(
+    state.distance,
+    state.maxDistance,
+    compoundSize,
+  )) {
+    final address = compoundSize - (state.distance - state.maxDistance);
+    _applyCompoundDictionaryReference(reader, state, address);
+    return;
+  }
+  _applyStaticDictionaryReference(reader, state, compoundSize);
+}
+
+/// Starts one compound-dictionary copy (port of Java's
+/// `initializeCompoundDictionaryCopy`, single-chunk case).
+void _applyCompoundDictionaryReference(
+  BitReader reader,
+  DecoderState state,
+  int address,
+) {
+  final dictionary = state.compoundDictionary;
+  final length = state.copyLength;
+  if (length <= 0 || length > dictionary.length - address) {
+    throw BrotliException(
+      BrotliErrorCode.invalidDistance,
+      'compound dictionary reference (address $address, length $length) '
+      'overruns the ${dictionary.length}-byte dictionary',
+      inputOffset: reader.bytesConsumed,
+    );
+  }
+  if (length > state.metaBlockLength) {
+    throw BrotliException(
+      BrotliErrorCode.invalidDistance,
+      'compound dictionary copy length $length overruns the metablock '
+      '(${state.metaBlockLength} bytes left)',
+      inputOffset: reader.bytesConsumed,
+    );
+  }
+  // Java/Rust roll the recent-distance cache for compound copies (unlike
+  // static-dictionary words).
+  state.distRbIdx = (state.distRbIdx + 1) & 3;
+  state.rings[state.distRbIdx] = state.distance;
+  state.metaBlockLength -= length;
+  state.compoundDictionaryOffset = address;
+  state.compoundDictionaryRemaining = length;
+  state.compoundDictionaryReferenceCount++;
+  state.phase = DecodePhase.copyFromCompoundDictionary;
+}
+
+/// Copies the remaining bytes of the active compound reference into the ring
+/// buffer, stopping at the current fence so the caller can flush.
+///
+/// Port of Java's `copyFromCompoundDictionary` (single-chunk variant); no
+/// input is consumed, so this phase never suspends on the bit reader.
+BrotliStatus? decodeCompoundDictionaryCopy(DecoderState state) {
+  final fence = state.calculateFence();
+  final dictionary = state.compoundDictionary;
+  while (state.compoundDictionaryRemaining > 0 && state.pos < fence) {
+    final space = fence - state.pos;
+    final length = state.compoundDictionaryRemaining < space
+        ? state.compoundDictionaryRemaining
+        : space;
+    state.ringBuffer.setRange(
+      state.pos,
+      state.pos + length,
+      dictionary,
+      state.compoundDictionaryOffset,
+    );
+    state.pos += length;
+    state.compoundDictionaryOffset += length;
+    state.compoundDictionaryRemaining -= length;
+  }
+  if (state.pos >= fence) {
+    state.nextPhase = DecodePhase.copyFromCompoundDictionary;
+    state.phase = DecodePhase.initWrite;
+    return null;
+  }
+  assert(
+    state.compoundDictionaryRemaining == 0,
+    'compound copy stopped before the fence',
+  );
+  state.compoundDictionaryOffset = -1;
+  state.phase = DecodePhase.mainLoop;
+  return null;
+}
+
 /// Resolves and writes one static-dictionary reference (port of
 /// `Decode.doUseDictionary` + `Transform.transformDictionaryWord`).
 ///
-/// Encoding (RFC 7932 §8):
-/// * `address = distance - maxDistance - 1` (no compound dictionary attached);
+/// Encoding (RFC 7932 §8, with an optional compound dictionary attached):
+/// * `address = distance - maxDistance - 1 - compoundSize`;
 /// * `wordLength = command copy length` must be `4..24`;
 /// * `shift = sizeBits[wordLength]`;
 /// * `wordIndex = address & ((1 << shift) - 1)`, `transformIndex = address >> shift`;
@@ -745,7 +869,11 @@ BrotliStatus? decodeDistance(BitReader reader, DecoderState state) {
 /// The metablock is charged with the **transformed** length, which may differ
 /// from the copy length, and the write may extend up to 37 bytes past the ring
 /// window into the slack region (the flush path wraps it afterwards).
-void _applyDictionaryReference(BitReader reader, DecoderState state) {
+void _applyStaticDictionaryReference(
+  BitReader reader,
+  DecoderState state,
+  int compoundSize,
+) {
   final fence = state.calculateFence();
   final wordLength = state.copyLength;
   if (wordLength < minDictionaryWordLength ||
@@ -766,13 +894,18 @@ void _applyDictionaryReference(BitReader reader, DecoderState state) {
       inputOffset: reader.bytesConsumed,
     );
   }
-  final address = state.distance - state.maxDistance - 1;
+  final address = staticDictionaryAddress(
+    state.distance,
+    state.maxDistance,
+    compoundSize,
+  );
   if (address < 0) {
-    // A compound dictionary would live here; caller-attached dictionaries are
-    // not part of the RFC static-dictionary path.
+    // Defensive: the caller only reaches the static path for addresses past
+    // the compound dictionary, so a negative value means malformed state.
     throw BrotliException(
-      BrotliErrorCode.unsupportedFeature,
-      'compound dictionary reference (address $address) is not supported',
+      BrotliErrorCode.invalidDistance,
+      'static dictionary address $address is negative '
+      '(compound size $compoundSize)',
       inputOffset: reader.bytesConsumed,
     );
   }

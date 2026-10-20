@@ -29,6 +29,10 @@ import 'decoder_core.dart';
 /// This is the Compat/Uint8List entry point. The blit-native `Bytes` entry
 /// point lives in `brotli_neo.dart` and wraps this function.
 ///
+/// Set [BrotliDecodeOptions.compoundDictionary] to attach the non-RFC
+/// caller-provided LZ77 dictionary (`brotli --dictionary`) that was used to
+/// produce the stream.
+///
 /// Throws [BrotliException] for malformed input,
 /// [BrotliErrorCode.outputLimitExceeded] when `options.maxOutputSize` is
 /// exceeded, and [BrotliErrorCode.unusedBytesAfterEnd] for trailing bytes
@@ -42,6 +46,7 @@ Uint8List brotliDecompress(
     allowLargeWindow: options.allowLargeWindow,
     maxOutputSize: options.maxOutputSize,
     eagerOutput: options.eagerOutput,
+    compoundDictionary: options.compoundDictionary,
   );
 }
 
@@ -168,6 +173,7 @@ final class BrotliDecoder {
       allowLargeWindow: options.allowLargeWindow,
       eagerOutput: options.eagerOutput,
       maxOutputSize: options.maxOutputSize,
+      compoundDictionary: options.compoundDictionary,
     );
   }
 
@@ -196,6 +202,10 @@ final class BrotliDecoder {
 
   /// Number of static-dictionary references decoded so far (telemetry).
   int get dictionaryReferenceCount => _core.state.dictionaryReferenceCount;
+
+  /// Number of compound-dictionary references decoded so far (telemetry).
+  int get compoundDictionaryReferenceCount =>
+      _core.state.compoundDictionaryReferenceCount;
 
   /// Whether the stream ended successfully.
   bool get isDone => _done;

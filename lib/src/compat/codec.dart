@@ -5,6 +5,10 @@
 /// conversion, so a `Stream<List<int>>.transform(BrotliCodec().decoder)` emits
 /// decompressed chunks as they become available instead of buffering the whole
 /// compressed stream.
+///
+/// Attach a caller-provided LZ77 compound dictionary through
+/// [BrotliDecodeOptions.compoundDictionary] in [BrotliCodec.decodeOptions]; it
+/// is honoured by both one-shot and chunked decoding.
 library;
 
 import 'dart:convert';

@@ -95,7 +95,8 @@ final class DecoderState {
     this.allowLargeWindow = false,
     this.eagerOutput = true,
     this.maxOutputSize,
-  }) {
+    Uint8List? compoundDictionary,
+  }) : compoundDictionary = compoundDictionary ?? Uint8List(0) {
     // Most-recent-first distance ring, exactly as Java's State constructor.
     rings[0] = 16;
     rings[1] = 15;
@@ -124,6 +125,16 @@ final class DecoderState {
   ///
   /// `null` means unlimited.
   final int? maxOutputSize;
+
+  /// Caller-attached LZ77 compound ("shared") dictionary; never empty when read.
+  ///
+  /// The bytes are treated as history immediately preceding the stream (the
+  /// non-RFC `brotli --dictionary` extension). `Uint8List(0)` means "no
+  /// dictionary attached" and is bit-identical to the RFC-only path.
+  final Uint8List compoundDictionary;
+
+  /// Number of bytes in [compoundDictionary].
+  int get compoundDictionarySize => compoundDictionary.length;
 
   // ---------------------------------------------------------------------------
   // State machine.
@@ -317,6 +328,16 @@ final class DecoderState {
   /// Number of static-dictionary references decoded so far (diagnostics,
   /// dictionary-coverage assertions and the D5 summary).
   int dictionaryReferenceCount = 0;
+
+  /// Number of compound-dictionary references decoded so far (diagnostics).
+  int compoundDictionaryReferenceCount = 0;
+
+  /// Next byte of [compoundDictionary] for the active reference, or `-1` when
+  /// no compound copy is in progress.
+  int compoundDictionaryOffset = -1;
+
+  /// Bytes still to copy from [compoundDictionary] for the active reference.
+  int compoundDictionaryRemaining = 0;
 
   /// Compressed-metablock header parser state (resumable across input refills).
   int headerStep = 0;

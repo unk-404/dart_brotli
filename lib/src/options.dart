@@ -1,6 +1,8 @@
 /// Public options and status types.
 library;
 
+import 'dart:typed_data';
+
 /// Brotli encoder mode.
 enum BrotliMode { generic, text, font }
 
@@ -48,6 +50,7 @@ final class BrotliDecodeOptions {
     this.maxOutputSize = 1 << 30,
     this.eagerOutput = true,
     this.allowLargeWindow = false,
+    this.compoundDictionary,
   });
 
   /// Decompression-bomb guard; `null` means unlimited.
@@ -58,4 +61,25 @@ final class BrotliDecodeOptions {
 
   /// Accept the non-RFC large-window extension (lgwin 25..30).
   final bool allowLargeWindow;
+
+  /// Optional caller-attached LZ77 compound ("shared" or "prepended")
+  /// dictionary.
+  ///
+  /// This implements the non-RFC extension used by `brotli --dictionary` and
+  /// the Rust `brotli`/`brotli-decompressor` crates: the dictionary bytes are
+  /// treated as history immediately preceding the compressed stream. Distances
+  /// in `(maxDistance, maxDistance + dictionary.length]` address it, furthest
+  /// byte first; larger distances keep addressing the built-in RFC static
+  /// dictionary, shifted by `dictionary.length`.
+  ///
+  /// The exact same dictionary the encoder used must be supplied. Brotli
+  /// streams carry no dictionary identifier or checksum, so a wrong dictionary
+  /// of the *same length* decodes successfully to different bytes; a dictionary
+  /// of a different length (or a missing one) normally raises
+  /// `BrotliException`. Streams that never use the dictionary decode
+  /// identically with or without it.
+  ///
+  /// The bytes are read-only and not copied; do not mutate the buffer while a
+  /// decode is in progress. `null` (the default) disables compound references.
+  final Uint8List? compoundDictionary;
 }
