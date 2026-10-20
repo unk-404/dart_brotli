@@ -9,9 +9,12 @@ Pure Dart Brotli (RFC 7932) encoder and decoder.
 - **Zero-copy bytes**: first-class [`blit`](https://pub.dev/packages/blit)
   integration (`Bytes`, `BytesLike`, `BytesMut`, `BytesFile`).
 - **Implemented**: RFC 7932 decoder (static dictionary, 121 transforms,
-  large-window decode), encoder quality 0–11, streaming decoder, and both the
-  blit-native and compat APIs. Compound/shared dictionaries and large-window
-  encoding are the remaining extensions (see `CHANGELOG.md`).
+  compound-dictionary decode, large-window decode), encoder quality 0–11 with
+  block splitting, 13-context modeling, static-dictionary matching, RLE
+  histograms, guided parsing and large-window encoding; streaming encoder and
+  decoder; blit-native, compat and file APIs.
+- **Remaining**: encoder-side compound/shared dictionary attachment (the
+  decoder already accepts Rust `--dictionary` streams).
 - **Two API layers**:
   - `brotli_neo.dart`: blit-native (`BytesLike` in, `Bytes` out);
   - `compat.dart`: `Uint8List`/`List<int>`, `dart:convert` codec and
@@ -42,6 +45,16 @@ import 'package:brotli_neo/compat.dart';
 
 final compressed = brotliCompress(Uint8List.fromList([1, 2, 3, 4]));
 final raw = brotliDecompress(compressed);
+```
+
+A stream produced with a Rust-style compound dictionary can be decoded by
+attaching the same bytes:
+
+```dart
+final raw = brotliDecompress(
+  compressed,
+  options: BrotliDecodeOptions(compoundDictionary: dictionary),
+);
 ```
 
 Streaming in both directions:
