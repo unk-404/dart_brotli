@@ -1,3 +1,20 @@
+## 0.2.1
+
+- Upgrade to `blit` 0.2.1. File I/O now uses the `Blit`/`BlitFile` facade
+  (`FileOptions`, `readAt`/`write`), and the blit-native encode/decode
+  functions route through the v2 core.
+- Add zero-copy `BrotliEncoderV2.encodeBytes` / `BrotliDecoderV2.decodeBytes`
+  for `BytesLike` inputs and `Bytes` outputs.
+- dart2wasm now uses the 64-bit bit reader/writer, wide copy and fused
+  metablock path (`dart.library.js_util` distinguishes dart2js). A 1 MiB q5
+  WASM binary decode now runs at ~846 MB/s instead of failing the fused loop.
+- CI benchmarks JIT/AOT/JS through `benchmark_test` and runs a dedicated
+  `tool/v2_wasm_bench.dart` for WASM; the old benchmark_test Node wasm driver
+  crashed in its test framework.
+- `UnsafeBytes` was evaluated for the hot path but is slower than
+  `Uint8List` (and less portable), so the codec keeps typed-array buffers;
+  blit participates at the I/O/API boundary instead.
+
 ## 0.2.0
 
 - **Breaking**: new performance-first raw API in `package:brotli_neo/v2.dart`

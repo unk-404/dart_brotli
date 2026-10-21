@@ -98,16 +98,29 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p build/benchmark_test
-          for target in jit aot js wasm; do
-            # benchmark_test can exit non-zero after emitting valid wasm rows
-            # (Node driver teardown); accept it only when the JSONL is non-empty.
+          for target in jit aot js; do
+            # benchmark_test can exit non-zero after emitting valid rows
+            # (the parent runner's teardown status is not reliable).
             set +e
             dart run benchmark_test --compile "$target" --output jsonl \
-              benchmark/brotli_benchmark_test.dart 2>/dev/null \
+              benchmark/brotli_benchmark_test.dart \
+              2> "build/benchmark_test/err_$target.txt" \
               | grep '^{' > "build/benchmark_test/brotli_$target.jsonl"
             set -e
-            test -s "build/benchmark_test/brotli_$target.jsonl"
+            if [ ! -s "build/benchmark_test/brotli_$target.jsonl" ]; then
+              cat "build/benchmark_test/err_$target.txt"
+              exit 1
+            fi
           done
+      - name: Run the WASM benchmark
+        run: |
+          set -euo pipefail
+          dart compile wasm tool/v2_wasm_bench.dart \
+            -o build/benchmark_test/v2_wasm_bench.wasm
+          cp tool/v2_wasm_run.mjs build/benchmark_test/
+          node build/benchmark_test/v2_wasm_run.mjs \
+            > build/benchmark_test/brotli_wasm.jsonl
+          test -s build/benchmark_test/brotli_wasm.jsonl
       - name: Normalize both implementations
         run: |
           dart run benchmark/normalize_bench.dart \

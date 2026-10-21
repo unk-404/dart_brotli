@@ -10,12 +10,14 @@ Pure Dart Brotli (RFC 7932) encoder and decoder.
 - **Bold rewrite, legacy retained**: `package:brotli_neo/v2.dart` is the new
   primary API; the v0.1 blit-native and compat APIs remain available during
   migration.
+- **blit 0.2.1**: file helpers use `Blit`/`BlitFile`; `encodeBytes`/`decodeBytes`
+  return zero-copy `Bytes` views, and the blit-native API routes through v2.
 - **Format coverage**: RFC 7932, large window, compound + prepared compound
   dictionaries, serialized shared dictionaries, streaming, qualities 0–11.
 - **Pure Dart**: no native assets, no FFI in the codec; VM and Web (dart2js /
   dart2wasm) are supported.
 
-> Status: 0.2.0. The decoder is byte-exact on all 22 RFC corpus pairs. The v2
+> Status: 0.2.1. The decoder is byte-exact on all 22 RFC corpus pairs. The v2
 > encoder/decoder pass the VM/AOT performance gate on the core corpus; Web
 > correctness is covered by Chrome/Node 1 MiB tests.
 
@@ -63,7 +65,7 @@ final raw = brotliDecode(compressed);
 
 ```yaml
 dependencies:
-  brotli_neo: ^0.2.0
+  brotli_neo: ^0.2.1
 ```
 
 For a legacy `Uint8List` API:

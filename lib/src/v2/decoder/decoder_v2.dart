@@ -7,6 +7,8 @@ library;
 
 import 'dart:typed_data';
 
+import 'package:blit/bytes.dart';
+
 import '../../common/errors.dart';
 import '../../options.dart';
 import 'bit_reader.dart';
@@ -49,6 +51,12 @@ abstract final class BrotliDecoderV2 {
       }
     }
   }
+
+  /// Decodes [input] and returns a zero-copy [Bytes] view of the output.
+  static Bytes decodeBytes(
+    BytesLike input, {
+    BrotliDecodeOptions options = const BrotliDecodeOptions(),
+  }) => Bytes.fromUint8List(decode(input.asUint8List(), options: options));
 
   /// Decodes [input] into [dst] and returns the number of bytes written.
   ///

@@ -41,6 +41,20 @@ List<Map<String, Object?>> _normalizeDart(File input) {
   for (final line in input.readAsLinesSync()) {
     if (!line.startsWith('{')) continue;
     final raw = jsonDecode(line) as Map<String, dynamic>;
+    // Hand-written WASM benchmark rows are already canonical (`id`/`value`).
+    if (raw['id'] is String && raw['value'] is num) {
+      final id = raw['id'] as String;
+      result.add(<String, Object?>{
+        'id': id,
+        'group': raw['group'] as String? ??
+            (id.startsWith('decode') ? 'Decode' : 'Encode'),
+        'label': raw['label'] as String? ?? id,
+        'unit': raw['unit'] as String? ?? 'B/s',
+        'direction': raw['direction'] as String? ?? 'higher',
+        'value': (raw['value'] as num).toDouble(),
+      });
+      continue;
+    }
     final name = raw['name'] as String;
     // benchmark_test prefixes the enclosing group name, e.g.
     // "brotli core decode.text.1024KiB.q5"; match the trailing operation id.

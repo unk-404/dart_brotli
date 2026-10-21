@@ -14,6 +14,8 @@ library;
 
 import 'dart:typed_data';
 
+import 'package:blit/bytes.dart';
+
 import '../../encoder/command.dart';
 import '../../encoder/encoder.dart' as v1;
 import '../../options.dart';
@@ -64,6 +66,12 @@ abstract final class BrotliEncoderV2 {
     }
     return v1.brotliCompress(input, options: options);
   }
+
+  /// Encodes [input] and returns a zero-copy [Bytes] view of the output.
+  static Bytes encodeBytes(
+    BytesLike input, {
+    BrotliEncodeOptions options = const BrotliEncodeOptions(),
+  }) => Bytes.fromUint8List(encode(input.asUint8List(), options: options));
 
   static Uint8List _fastEncode(Uint8List input, V2ParseParams params) {
     final writer = BitWriterV2(initialCapacity: input.length >> 2);

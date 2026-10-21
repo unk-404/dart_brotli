@@ -1,16 +1,15 @@
 /// blit-native public API.
 ///
 /// Inputs accept any [BytesLike] (including [Bytes] and [BytesMut]); outputs
-/// are zero-copy [Bytes] views. The actual encode/decode implementations are
-/// reached through the Compat core for now and will use `BytesMutSink` once
-/// the codec lands.
+/// are zero-copy [Bytes] views. Encoding/decoding uses the v0.2 fast core and
+/// wraps the resulting `Uint8List` without copying.
 library;
 
 import 'package:blit/bytes.dart';
 
-import 'decoder/decoder.dart';
-import 'encoder/encoder.dart';
 import 'options.dart';
+import 'v2/decoder/decoder_v2.dart';
+import 'v2/encoder/encoder_v2.dart';
 
 /// Decodes one complete Brotli stream, returning a zero-copy [Bytes] view.
 ///
@@ -40,7 +39,7 @@ Bytes brotliDecode(
               sharedDictionary?.asUint8List() ?? options.sharedDictionary,
         );
   return Bytes.fromUint8List(
-    brotliDecompress(input.asUint8List(), options: decodeOptions),
+    BrotliDecoderV2.decode(input.asUint8List(), options: decodeOptions),
   );
 }
 
@@ -50,6 +49,6 @@ Bytes brotliEncode(
   BrotliEncodeOptions options = const BrotliEncodeOptions(),
 }) {
   return Bytes.fromUint8List(
-    brotliCompress(input.asUint8List(), options: options),
+    BrotliEncoderV2.encode(input.asUint8List(), options: options),
   );
 }

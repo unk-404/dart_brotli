@@ -4,6 +4,7 @@ library;
 
 import 'dart:typed_data';
 
+import 'package:blit/bytes.dart';
 import 'package:brotli_neo/v2.dart';
 import 'package:crypto/crypto.dart';
 import 'package:test/test.dart';
@@ -34,6 +35,15 @@ void main() {
     );
     expect(decoded, input.length);
     expect(output, orderedEquals(input));
+  });
+
+  test('v2 Bytes API returns zero-copy blit views', () {
+    final input = Bytes.fromList(List<int>.generate(2048, (i) => i & 0xFF));
+    final compressed = BrotliEncoderV2.encodeBytes(input);
+    expect(compressed.length, greaterThan(0));
+    final restored = BrotliDecoderV2.decodeBytes(compressed);
+    expect(restored.length, input.length);
+    expect(restored.asUint8List(), orderedEquals(input.asUint8List()));
   });
 
   test('v2 encoder matches the committed VM parity hashes', () {

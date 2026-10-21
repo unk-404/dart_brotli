@@ -1,8 +1,8 @@
 /// Optional file helpers for Brotli streams.
 ///
-/// Backed by `package:blit`'s random-access `BytesFile` (native `dart:io`
-/// backend, Web OPFS backend), so this library stays web-safe: it never
-/// imports `dart:io`.
+/// Backed by `package:blit` 0.2.x (`BlitFile`/`Blit`), which uses native
+/// random-access I/O on the VM and Web storage on the browser, so this library
+/// stays web-safe: it never imports `dart:io`.
 ///
 /// Import it explicitly:
 ///
@@ -16,7 +16,7 @@ library;
 
 import 'dart:typed_data';
 
-import 'package:blit/bytes.dart' show openBytesFile;
+import 'package:blit/blit.dart';
 
 import 'src/common/errors.dart';
 import 'src/decoder/decoder.dart';
@@ -39,7 +39,10 @@ Future<Uint8List> brotliDecodeFile(
   String path, {
   BrotliDecodeOptions options = const BrotliDecodeOptions(),
 }) async {
-  final file = await openBytesFile(path, create: false, readOnly: true);
+  final file = await const Blit().open(
+    path,
+    options: const FileOptions(mode: FileMode.read, create: false),
+  );
   try {
     final decoder = BrotliDecoder(options: options);
     final output = Uint8List(_fileChunkSize);
@@ -49,18 +52,13 @@ Future<Uint8List> brotliDecodeFile(
     var done = false;
     while (!done) {
       if (!eof) {
-        final input = Uint8List(_fileChunkSize);
-        final read = await file.readAt(fileOffset, input);
-        if (read <= 0) {
+        final input = await file.readAt(fileOffset, _fileChunkSize);
+        if (input.length == 0) {
           eof = true;
           decoder.closeInput();
         } else {
-          fileOffset += read;
-          decoder.addInput(
-            read == input.length
-                ? input
-                : Uint8List.sublistView(input, 0, read),
-          );
+          fileOffset += input.length;
+          decoder.addInput(input);
         }
       }
       final status = _pump(decoder, builder, output);
@@ -96,10 +94,16 @@ Future<void> brotliEncodeFile(
   bool create = true,
 }) async {
   final compressed = brotliCompress(input, options: options);
-  final file = await openBytesFile(path, create: create);
+  final file = await const Blit().open(
+    path,
+    options: FileOptions(
+      mode: FileMode.write,
+      create: create,
+      truncate: true,
+    ),
+  );
   try {
-    await file.writeAt(0, compressed);
-    await file.truncate(compressed.length);
+    await file.write(compressed);
     await file.flush();
   } finally {
     await file.close();
