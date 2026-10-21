@@ -4,33 +4,53 @@ Pure Dart Brotli (RFC 7932) encoder and decoder.
 
 ![brotli_neo vs Rust brotli: decode/encode, 1 MiB, Q5](https://raw.githubusercontent.com/unk-404/dart_brotli/master/assets/benchmarks.svg)
 
-- **Pure Dart**: no native assets, no FFI in the codec, works on the VM and on
-  the web (dart2js / dart2wasm).
-- **Zero-copy bytes**: first-class [`blit`](https://pub.dev/packages/blit)
-  integration (`Bytes`, `BytesLike`, `BytesMut`, `BytesFile`).
-- **Implemented**: RFC 7932 decoder (static dictionary, 121 transforms,
-  large-window decode), encoder quality 0–11 with block splitting, 13-context
-  modeling, static-dictionary matching, RLE histograms, guided parsing and
-  large-window encoding; compound dictionary encode + decode, including a
-  reusable `BrotliPreparedDictionary`; serialized shared-dictionary decode;
-  streaming encoder and decoder; blit-native, compat and file APIs.
-- **Format coverage**: no remaining Brotli format extensions; future work is
-  ratio/speed tuning and ecosystem integration.
-- **Two API layers**:
-  - `brotli_neo.dart`: blit-native (`BytesLike` in, `Bytes` out);
-  - `compat.dart`: `Uint8List`/`List<int>`, `dart:convert` codec and
-    `package:brotli`-style functions.
+- **v0.2.0 performance core**: a new raw `Uint8List` API with 64-bit
+  accumulators on VM/AOT and a safe 32-bit Web fallback. AOT q5 throughput is
+  ~90–160% of the Rust `brotli` oracle on the 1 MiB benchmark corpus.
+- **Bold rewrite, legacy retained**: `package:brotli_neo/v2.dart` is the new
+  primary API; the v0.1 blit-native and compat APIs remain available during
+  migration.
+- **Format coverage**: RFC 7932, large window, compound + prepared compound
+  dictionaries, serialized shared dictionaries, streaming, qualities 0–11.
+- **Pure Dart**: no native assets, no FFI in the codec; VM and Web (dart2js /
+  dart2wasm) are supported.
 
-> Status: 0.1.2. The decoder is byte-exact on all 22 RFC corpus pairs; the
-> encoder covers quality 0–11 and the public streaming/compat/file APIs are
-> usable. CI runs the VM, browser, Wasm and Rust-oracle suites.
+> Status: 0.2.0. The decoder is byte-exact on all 22 RFC corpus pairs. The v2
+> encoder/decoder pass the VM/AOT performance gate on the core corpus; Web
+> correctness is covered by Chrome/Node 1 MiB tests.
 
-## Getting started
+## Quick start (v2)
 
-```yaml
-dependencies:
-  brotli_neo: ^0.1.0
+```dart
+import 'dart:typed_data';
+import 'package:brotli_neo/v2.dart';
+
+final compressed = BrotliEncoderV2.encode(raw);   // Uint8List
+final restored = BrotliDecoderV2.decode(compressed);
 ```
+
+`encodeInto` / `decodeInto` write into caller buffers:
+
+```dart
+final dst = Uint8List(estimatedSize);
+final n = BrotliEncoderV2.encodeInto(dst, raw);
+```
+
+### Performance (AOT, 1 MiB, q5, this machine)
+
+| operation | brotli_neo v2 | Rust oracle | ratio |
+|---|---:|---:|---:|
+| decode text | ~1.5 GB/s | ~1.1 GB/s | 138% |
+| decode binary | ~900 MB/s | ~570 MB/s | 159% |
+| encode text | ~190 MB/s | ~163 MB/s | 117% |
+| encode binary | ~101 MB/s | ~113 MB/s | 89% |
+
+Q0/Q1 are routed through the legacy greedy implementation where it is faster;
+Q9/Q11 retain the quality tiers. The official gate is in
+`benchmark/v2_native.json` + `tool/v2_bench.dart`; it can swing with host load,
+so run it on an idle machine.
+
+The legacy blit-native API remains available:
 
 ```dart
 import 'package:brotli_neo/brotli_neo.dart';
@@ -39,7 +59,14 @@ final compressed = brotliEncode(Bytes.fromList([1, 2, 3, 4]));
 final raw = brotliDecode(compressed);
 ```
 
-For a `Uint8List` API:
+## Installation
+
+```yaml
+dependencies:
+  brotli_neo: ^0.2.0
+```
+
+For a legacy `Uint8List` API:
 
 ```dart
 import 'package:brotli_neo/compat.dart';

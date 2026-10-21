@@ -12,3 +12,5 @@ export 'src/encoder/encoder.dart' show brotliCompress, maxCompressedSize;
 export 'src/encoder/prepared_dictionary.dart' show BrotliPreparedDictionary;
 export 'src/encoder/streaming_encoder.dart' show BrotliEncoder;
 export 'src/options.dart';
+export 'src/v2/decoder/decoder_v2.dart';
+export 'src/v2/encoder/encoder_v2.dart';

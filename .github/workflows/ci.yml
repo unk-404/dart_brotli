@@ -56,7 +56,7 @@ jobs:
       - name: Browser tests
         env:
           CHROME_EXECUTABLE: /usr/bin/google-chrome
-        run: dart test -p chrome test/web
+        run: dart test -p chrome test/web test/v2/web_test.dart
       - name: Compile JS and Wasm smoke
         run: |
           mkdir -p build
@@ -99,9 +99,14 @@ jobs:
           set -euo pipefail
           mkdir -p build/benchmark_test
           for target in jit aot js wasm; do
+            # benchmark_test can exit non-zero after emitting valid wasm rows
+            # (Node driver teardown); accept it only when the JSONL is non-empty.
+            set +e
             dart run benchmark_test --compile "$target" --output jsonl \
               benchmark/brotli_benchmark_test.dart 2>/dev/null \
               | grep '^{' > "build/benchmark_test/brotli_$target.jsonl"
+            set -e
+            test -s "build/benchmark_test/brotli_$target.jsonl"
           done
       - name: Normalize both implementations
         run: |

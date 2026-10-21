@@ -1,7 +1,8 @@
 # Benchmarks
 
 The benchmark is deliberately small: **four core operations** measured for five
-implementations on exactly the same data.
+implementations on exactly the same data. The Dart rows use the v0.2.0
+`BrotliEncoderV2`/`BrotliDecoderV2` API; Rust is the authoritative oracle.
 
 | operation | payload | quality |
 |---|---|---|

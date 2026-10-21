@@ -1,3 +1,21 @@
+## 0.2.0
+
+- **Breaking**: new performance-first raw API in `package:brotli_neo/v2.dart`
+  (`BrotliEncoderV2`/`BrotliDecoderV2`, one-shot and `*Into` buffer variants).
+  The v0.1 blit-native and `compat.dart` APIs remain available for migration.
+- VM/AOT uses 64-bit bit accumulators and a fused metablock decoder; Web uses a
+  correct 32-bit fallback (Chrome/Node 1 MiB parity tests).
+- AOT 1 MiB q5: decode text ~1.5 GB/s / binary ~900 MB/s; encode text
+  ~190 MB/s / binary ~101 MB/s. Relative to the Rust oracle this is roughly
+  138%/159% decode and 117%/89% encode on this machine.
+- Hybrid quality routing: q0/q1 use the faster legacy greedy path on text and
+  a binary-tuned greedy tier on binary; q2–q5 use the v2 fast path; q6+ keeps
+  the quality tiers. Legacy is byte-identical for delegated qualities.
+- Web 1 MiB decode underflow fixed by disabling the 64-bit-only fused loop on
+  dart2js and using the generic resumable path.
+- Benchmark card now exercises the v2 API; native comparison and the
+  `tool/v2_bench.dart` gate are part of the repository.
+
 ## 0.1.2
 
 - Serialized shared dictionaries are decoded

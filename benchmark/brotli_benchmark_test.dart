@@ -25,21 +25,21 @@ void main() {
   final text = makeText();
   final binary = makeBinary();
   const quality = BrotliEncodeOptions(quality: 5);
-  final textStream = brotliCompress(text, options: quality);
-  final binaryStream = brotliCompress(binary, options: quality);
+  final textStream = BrotliEncoderV2.encode(text, options: quality);
+  final binaryStream = BrotliEncoderV2.encode(binary, options: quality);
 
   group('brotli core', () {
     benchmark('decode.text.1024KiB.q5', () {
-      brotliDecompress(textStream);
+      BrotliDecoderV2.decode(textStream);
     });
     benchmark('decode.binary.1024KiB.q5', () {
-      brotliDecompress(binaryStream);
+      BrotliDecoderV2.decode(binaryStream);
     });
     benchmark('encode.text.1024KiB.q5', () {
-      brotliCompress(text, options: quality);
+      BrotliEncoderV2.encode(text, options: quality);
     });
     benchmark('encode.binary.1024KiB.q5', () {
-      brotliCompress(binary, options: quality);
+      BrotliEncoderV2.encode(binary, options: quality);
     });
   });
 }

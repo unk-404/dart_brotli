@@ -1,0 +1,190 @@
+{
+  "schema": "brotli_neo/v2_native@1",
+  "tool": "tool/oracle_rust (brotli-oracle)",
+  "tool_version": "0.1.0",
+  "brotli_crate": "9.0.0",
+  "host": {
+    "os": "windows",
+    "arch": "x86_64",
+    "cpu": "AMD64 Family 25 Model 97 Stepping 2, AuthenticAMD",
+    "cores": 32
+  },
+  "lgwin": 22,
+  "mode": "generic",
+  "unit": "MB/s",
+  "statistic": "median of independent runs",
+  "runs": 3,
+  "rounds": 31,
+  "warmup": 5,
+  "method": "Median of 3 independent oracle runs; each run is the arithmetic mean of 31 timed rounds (std::time::Instant). MB/s = raw_bytes / mean_seconds / 1e6; min/max bound the per-run values. Encode is one-shot BrotliCompress, generic mode, lgwin 22, size_hint = input. Decode is strict one-shot BrotliDecompressStream; trailing bytes are rejected. Measured by tool/oracle_rust.",
+  "corpus": {
+    "text": {
+      "path": "build/benchmark_test/corpus/text.bin",
+      "bytes": 1048576,
+      "sha256": "200b26ac6b677fc620f6892d59cfbc6d732a6b3f8804164899c19f59fb6a02dc"
+    },
+    "binary": {
+      "path": "build/benchmark_test/corpus/binary.bin",
+      "bytes": 1048576,
+      "sha256": "a32a09d0bf21f66a7c2418b1d5ecb0f46045de4607843b88d3181b71c7e15e3f"
+    }
+  },
+  "results": {
+    "text": {
+      "encode": {
+        "q0": {
+          "mb_per_second": 330.167,
+          "rme_pct": 1.484,
+          "min_mb_per_second": 297.223,
+          "max_mb_per_second": 349.516,
+          "raw_bytes": 1048576,
+          "compressed_bytes": 116996,
+          "ratio": 8.962
+        },
+        "q1": {
+          "mb_per_second": 400.749,
+          "rme_pct": 0.684,
+          "min_mb_per_second": 399.886,
+          "max_mb_per_second": 421.818,
+          "raw_bytes": 1048576,
+          "compressed_bytes": 105374,
+          "ratio": 9.951
+        },
+        "q5": {
+          "mb_per_second": 169.716,
+          "rme_pct": 1.133,
+          "min_mb_per_second": 150.525,
+          "max_mb_per_second": 176.359,
+          "raw_bytes": 1048576,
+          "compressed_bytes": 14675,
+          "ratio": 71.453
+        },
+        "q9": {
+          "mb_per_second": 61.427,
+          "rme_pct": 2.452,
+          "min_mb_per_second": 57.396,
+          "max_mb_per_second": 62.807,
+          "raw_bytes": 1048576,
+          "compressed_bytes": 12649,
+          "ratio": 82.898
+        }
+      },
+      "decode": {
+        "q0": {
+          "mb_per_second": 508.911,
+          "rme_pct": 2.431,
+          "min_mb_per_second": 443.882,
+          "max_mb_per_second": 541.049,
+          "raw_bytes": 1048576,
+          "compressed_bytes": 116996,
+          "ratio": 8.962
+        },
+        "q1": {
+          "mb_per_second": 608.356,
+          "rme_pct": 3.388,
+          "min_mb_per_second": 562.713,
+          "max_mb_per_second": 660.574,
+          "raw_bytes": 1048576,
+          "compressed_bytes": 105374,
+          "ratio": 9.951
+        },
+        "q5": {
+          "mb_per_second": 1335.261,
+          "rme_pct": 4.288,
+          "min_mb_per_second": 1082.612,
+          "max_mb_per_second": 1472.326,
+          "raw_bytes": 1048576,
+          "compressed_bytes": 14675,
+          "ratio": 71.453
+        },
+        "q9": {
+          "mb_per_second": 1318.445,
+          "rme_pct": 4.456,
+          "min_mb_per_second": 1202.162,
+          "max_mb_per_second": 1507.245,
+          "raw_bytes": 1048576,
+          "compressed_bytes": 12649,
+          "ratio": 82.898
+        }
+      }
+    },
+    "binary": {
+      "encode": {
+        "q0": {
+          "mb_per_second": 220.355,
+          "rme_pct": 2.405,
+          "min_mb_per_second": 205.194,
+          "max_mb_per_second": 231.024,
+          "raw_bytes": 1048576,
+          "compressed_bytes": 264151,
+          "ratio": 3.97
+        },
+        "q1": {
+          "mb_per_second": 271.652,
+          "rme_pct": 0.654,
+          "min_mb_per_second": 255.763,
+          "max_mb_per_second": 278.079,
+          "raw_bytes": 1048576,
+          "compressed_bytes": 246138,
+          "ratio": 4.26
+        },
+        "q5": {
+          "mb_per_second": 106.962,
+          "rme_pct": 3.969,
+          "min_mb_per_second": 106.649,
+          "max_mb_per_second": 119.447,
+          "raw_bytes": 1048576,
+          "compressed_bytes": 161691,
+          "ratio": 6.485
+        },
+        "q9": {
+          "mb_per_second": 26.996,
+          "rme_pct": 5.776,
+          "min_mb_per_second": 23.944,
+          "max_mb_per_second": 28.932,
+          "raw_bytes": 1048576,
+          "compressed_bytes": 161419,
+          "ratio": 6.496
+        }
+      },
+      "decode": {
+        "q0": {
+          "mb_per_second": 393.761,
+          "rme_pct": 0.84,
+          "min_mb_per_second": 379.686,
+          "max_mb_per_second": 407.748,
+          "raw_bytes": 1048576,
+          "compressed_bytes": 264151,
+          "ratio": 3.97
+        },
+        "q1": {
+          "mb_per_second": 475.609,
+          "rme_pct": 3.049,
+          "min_mb_per_second": 400.321,
+          "max_mb_per_second": 481.04,
+          "raw_bytes": 1048576,
+          "compressed_bytes": 246138,
+          "ratio": 4.26
+        },
+        "q5": {
+          "mb_per_second": 608.681,
+          "rme_pct": 2.222,
+          "min_mb_per_second": 591.168,
+          "max_mb_per_second": 626.265,
+          "raw_bytes": 1048576,
+          "compressed_bytes": 161691,
+          "ratio": 6.485
+        },
+        "q9": {
+          "mb_per_second": 562.825,
+          "rme_pct": 2.222,
+          "min_mb_per_second": 506.286,
+          "max_mb_per_second": 573.52,
+          "raw_bytes": 1048576,
+          "compressed_bytes": 161419,
+          "ratio": 6.496
+        }
+      }
+    }
+  }
+}
