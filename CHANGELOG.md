@@ -1,12 +1,16 @@
-## 0.2.1
+## 0.2.0
 
+- **Breaking**: new performance-first raw API in `package:brotli_neo/v2.dart`
+  (`BrotliEncoderV2`/`BrotliDecoderV2`, one-shot and `*Into` buffer variants).
+  The v0.1 blit-native and `compat.dart` APIs remain available for migration.
 - Upgrade to `blit` 0.2.1. File I/O now uses the `Blit`/`BlitFile` facade
   (`FileOptions`, `readAt`/`write`), and the blit-native encode/decode
   functions route through the v2 core.
 - Add zero-copy `BrotliEncoderV2.encodeBytes` / `BrotliDecoderV2.decodeBytes`
   for `BytesLike` inputs and `Bytes` outputs.
-- dart2wasm now uses the 64-bit bit reader/writer, wide copy and fused
-  metablock path (`dart.library.js_util` distinguishes dart2js). A 1 MiB q5
+- VM/AOT/dart2wasm use 64-bit bit accumulators, wide copy and the fused
+  metablock decoder; dart2js uses the correct 32-bit fallback
+  (`dart.library.js_util` distinguishes the two Web compilers). A 1 MiB q5
   WASM binary decode now runs at ~846 MB/s instead of failing the fused loop.
 - CI benchmarks JIT/AOT/JS through `benchmark_test` and runs a dedicated
   `tool/v2_wasm_bench.dart` for WASM; the old benchmark_test Node wasm driver
@@ -14,14 +18,6 @@
 - `UnsafeBytes` was evaluated for the hot path but is slower than
   `Uint8List` (and less portable), so the codec keeps typed-array buffers;
   blit participates at the I/O/API boundary instead.
-
-## 0.2.0
-
-- **Breaking**: new performance-first raw API in `package:brotli_neo/v2.dart`
-  (`BrotliEncoderV2`/`BrotliDecoderV2`, one-shot and `*Into` buffer variants).
-  The v0.1 blit-native and `compat.dart` APIs remain available for migration.
-- VM/AOT uses 64-bit bit accumulators and a fused metablock decoder; Web uses a
-  correct 32-bit fallback (Chrome/Node 1 MiB parity tests).
 - AOT 1 MiB q5 benchmark card: decode text ~1.74 GB/s / binary ~1.11 GB/s;
   encode text ~244 MB/s / binary ~168 MB/s. Relative to the Rust oracle this
   is roughly 158%/215% decode and 138%/140% encode on this machine.

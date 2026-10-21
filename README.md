@@ -17,7 +17,7 @@ Pure Dart Brotli (RFC 7932) encoder and decoder.
 - **Pure Dart**: no native assets, no FFI in the codec; VM and Web (dart2js /
   dart2wasm) are supported.
 
-> Status: 0.2.1. The decoder is byte-exact on all 22 RFC corpus pairs. The v2
+> Status: 0.2.0. The decoder is byte-exact on all 22 RFC corpus pairs. The v2
 > encoder/decoder pass the VM/AOT performance gate on the core corpus; Web
 > correctness is covered by Chrome/Node 1 MiB tests.
 
@@ -65,7 +65,7 @@ final raw = brotliDecode(compressed);
 
 ```yaml
 dependencies:
-  brotli_neo: ^0.2.1
+  brotli_neo: ^0.2.0
 ```
 
 For a legacy `Uint8List` API:
