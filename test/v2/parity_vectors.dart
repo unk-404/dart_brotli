@@ -46,7 +46,7 @@ const List<ParityVector> parityVectors = <ParityVector>[
     1,
     1024,
     5,
-    '9e0175163bb7458bd311c76f88f05ef6b6b0f71db28c3d9f712294880d0592bd',
+    'fbadb9f8d369d1122fa64e6c7d9afe9a80343d6e604636b5ff5e6b22dc030547',
   ),
   ParityVector(
     2,

@@ -52,6 +52,9 @@ abstract final class BrotliEncoderV2 {
     BrotliEncodeOptions options = const BrotliEncodeOptions(),
   }) {
     if (_canUseFastPath(options)) {
+      if (options.quality == 5 && _looksBinary(input)) {
+        return _fastEncode(input, V2ParseParams.q5Binary);
+      }
       return _fastEncode(input, V2ParseParams.q5);
     }
     if (_canUseGreedyBinary(options) && _looksBinary(input)) {

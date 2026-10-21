@@ -103,6 +103,20 @@ final class V2ParseParams {
     positionStride: 2,
   );
 
+  /// Binary q5 tier: one extra candidate and a recent-distance probe, but
+  /// still greedy and hash-light. Used when the input is classified binary;
+  /// text q5 keeps the full lazy tier.
+  static const V2ParseParams q5Binary = V2ParseParams(
+    bucketBits: 16,
+    maxCandidates: 2,
+    numLastDistances: 1,
+    lazySteps: 0,
+    minMatch: 4,
+    blockSize: 1 << 17,
+    denseInsertLimit: 0,
+    positionStride: 2,
+  );
+
   /// Quality 2..5 speed tier: small table for cache locality, four chain
   /// candidates, two recent-distance probes, 1-step lazy, and the chain walk
   /// skipped once a recent distance already matches 16 bytes. Tuned on the

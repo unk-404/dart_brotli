@@ -5,9 +5,9 @@
   The v0.1 blit-native and `compat.dart` APIs remain available for migration.
 - VM/AOT uses 64-bit bit accumulators and a fused metablock decoder; Web uses a
   correct 32-bit fallback (Chrome/Node 1 MiB parity tests).
-- AOT 1 MiB q5: decode text ~1.5 GB/s / binary ~900 MB/s; encode text
-  ~190 MB/s / binary ~101 MB/s. Relative to the Rust oracle this is roughly
-  138%/159% decode and 117%/89% encode on this machine.
+- AOT 1 MiB q5 benchmark card: decode text ~1.74 GB/s / binary ~1.11 GB/s;
+  encode text ~244 MB/s / binary ~168 MB/s. Relative to the Rust oracle this
+  is roughly 158%/215% decode and 138%/140% encode on this machine.
 - Hybrid quality routing: q0/q1 use the faster legacy greedy path on text and
   a binary-tuned greedy tier on binary; q2–q5 use the v2 fast path; q6+ keeps
   the quality tiers. Legacy is byte-identical for delegated qualities.

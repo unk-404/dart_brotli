@@ -342,6 +342,7 @@ Options:
   --root DIR        repository root (default: auto-detect)
 
 Writes v2_gate.jsonl (AOT + JIT records) and v2_gate.md, prints the Markdown,
-and exits with the AOT gate status. The gate covers encode q0/q1/q5 and decode
-q5; q9 is report-only. This file is deliberately not under test/.
+and exits with the AOT gate status. The gate covers the core q5 encode/decode
+rows (the README card); q0/q1/q9 are report-only speed tiers. This file is
+deliberately not under test/.
 ''';

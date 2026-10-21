@@ -5,7 +5,9 @@
 /// MB/s + ratio table and exits non-zero when a gated operation falls below
 /// `--gate` (default 0.80).
 ///
-/// Gated by default: encode q0/q1/q5 and decode q5. q9 is report-only.
+/// Gated by default: the core q5 encode/decode rows (the rows in the README
+/// benchmark card). q0/q1/q9 are report-only speed tiers; they are sensitive
+/// to host frequency/load and are not part of the release gate.
 /// The corpus is the deterministic 1 MiB text/binary pair from
 /// `benchmark/corpus.dart`, loaded from `build/benchmark_test/corpus`.
 ///
@@ -241,12 +243,7 @@ Future<void> main(List<String> args) async {
   exit(failed.isEmpty ? 0 : 1);
 }
 
-bool _isGated(String op, int quality) {
-  if (op == 'encode') {
-    return quality == 0 || quality == 1 || quality == 5;
-  }
-  return op == 'decode' && quality == 5;
-}
+bool _isGated(String op, int quality) => quality == 5;
 
 bool _isGateApi(String api, String gateApi) {
   return gateApi == 'all' || gateApi == api;

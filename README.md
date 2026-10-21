@@ -40,10 +40,10 @@ final n = BrotliEncoderV2.encodeInto(dst, raw);
 
 | operation | brotli_neo v2 | Rust oracle | ratio |
 |---|---:|---:|---:|
-| decode text | ~1.5 GB/s | ~1.1 GB/s | 138% |
-| decode binary | ~900 MB/s | ~570 MB/s | 159% |
-| encode text | ~190 MB/s | ~163 MB/s | 117% |
-| encode binary | ~101 MB/s | ~113 MB/s | 89% |
+| decode text | ~1.74 GB/s | ~1.10 GB/s | 158% |
+| decode binary | ~1.11 GB/s | ~529 MB/s | 215% |
+| encode text | ~244 MB/s | ~176 MB/s | 138% |
+| encode binary | ~168 MB/s | ~120 MB/s | 140% |
 
 Q0/Q1 are routed through the legacy greedy implementation where it is faster;
 Q9/Q11 retain the quality tiers. The official gate is in
