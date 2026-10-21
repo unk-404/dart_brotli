@@ -339,7 +339,7 @@ final class _GreedyState {
     required this.distCache,
   });
 
-  /// Creates the state for [quality] ( /1), sized for [blockSize].
+  /// Creates the state for [quality] (0/1), sized for [blockSize].
   factory _GreedyState.forQuality(int quality, int blockSize) {
     final minMatch = quality == 0 ? 4 : 6;
     return _GreedyState(
